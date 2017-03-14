@@ -7,6 +7,8 @@ find_package(
     REQUIRED
 ) 
 
+set(LIBRARY_OUTPUT_PATH lib)
+
 include_directories(${Boost_INCLUDE_DIRS})
 link_directories(${Boost_LIBRARY_DIRS})
 
@@ -18,11 +20,15 @@ add_subdirectory(src)
 
 get_property(GLOBAL_SRCS GLOBAL PROPERTY GLOBAL_SOURCES)
 
+add_library(Dumbo ${GLOBAL_SRCS})
 
-add_executable(dumbo main.cpp ${GLOBAL_SRCS})
-target_link_libraries(dumbo boost_context)
+export(TARGETS Dumbo FILE ${LIBRARY_OUTPUT_PATH}/Dumbo.cmake)
 
-SET_TARGET_PROPERTIES(dumbo PROPERTIES COMPILE_FLAGS "-std=c++14 -Wfatal-errors")
+add_executable(main main.cpp )
+target_link_libraries(main boost_context Dumbo)
 
+SET_TARGET_PROPERTIES(main PROPERTIES COMPILE_FLAGS "-std=c++14 -Wfatal-errors")
 
-install(TARGETS dumbo RUNTIME DESTINATION bin)
+add_subdirectory(tests)
+
+install(TARGETS main RUNTIME DESTINATION bin)
