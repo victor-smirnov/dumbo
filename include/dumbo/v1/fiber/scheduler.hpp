@@ -111,15 +111,11 @@ public:
     void set_remote_ready( context *) noexcept;
 #endif
 
-#if (BOOST_EXECUTION_CONTEXT==1)
-    void dispatch() noexcept;
 
-    void set_terminated( context *) noexcept;
-#else
     boost::context::execution_context< detail::data_t * > dispatch() noexcept;
 
     boost::context::execution_context< detail::data_t * > set_terminated( context *) noexcept;
-#endif
+
 
     void yield( context *) noexcept;
 

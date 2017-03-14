@@ -136,10 +136,7 @@ thread_local std::size_t context_initializer::counter_;
 
 context *
 context::active() noexcept {
-#if (BOOST_EXECUTION_CONTEXT==1)
-    // initialized the first time control passes; per thread
-    thread_local static boost::context::detail::activation_record_initializer rec_initializer;
-#endif
+
     // initialized the first time control passes; per thread
     thread_local static context_initializer ctx_initializer;
     return context_initializer::active_;
@@ -150,17 +147,7 @@ context::reset_active() noexcept {
     context_initializer::active_ = nullptr;
 }
 
-#if (BOOST_EXECUTION_CONTEXT==1)
-void
-context::resume_( detail::data_t & d) noexcept {
-    detail::data_t * dp = static_cast< detail::data_t * >( ctx_( & d) );
-    if ( nullptr != dp->lk) {
-        dp->lk->unlock();
-    } else if ( nullptr != dp->ctx) {
-        context_initializer::active_->set_ready_( dp->ctx);
-    }
-}
-#else
+
 void
 context::resume_( detail::data_t & d) noexcept {
     auto result = ctx_( & d);
@@ -174,7 +161,7 @@ context::resume_( detail::data_t & d) noexcept {
         }
     }
 }
-#endif
+
 
 void
 context::set_ready_( context * ctx) noexcept {
@@ -186,11 +173,7 @@ context::context( main_context_t) noexcept :
     use_count_{ 1 }, // allocated on main- or thread-stack
     flags_{ 0 },
     type_{ type::main_context },
-#if (BOOST_EXECUTION_CONTEXT==1)
-    ctx_{ boost::context::execution_context::current() } {
-#else
     ctx_{} {
-#endif
 }
 
 // dispatcher fiber context
@@ -198,21 +181,7 @@ context::context( dispatcher_context_t, boost::context::preallocated const& pall
                   default_stack const& salloc, scheduler * sched) :
     flags_{ 0 },
     type_{ type::dispatcher_context },
-#if (BOOST_EXECUTION_CONTEXT==1)
-    ctx_{ std::allocator_arg, palloc, salloc,
-          [this,sched](void * vp) noexcept {
-              detail::data_t * dp = static_cast< detail::data_t * >( vp);
-            if ( nullptr != dp->lk) {
-                dp->lk->unlock();
-            } else if ( nullptr != dp->ctx) {
-                context_initializer::active_->set_ready_( dp->ctx);
-            }
-            // execute scheduler::dispatch()
-            sched->dispatch();
-            // dispatcher context should never return from scheduler::dispatch()
-            BOOST_ASSERT_MSG( false, "disatcher fiber already terminated");
-          }}
-#else
+
     ctx_{ std::allocator_arg, palloc, salloc,
           [this,sched](boost::context::execution_context< detail::data_t * > ctx, detail::data_t * dp) noexcept {
             // update execution_context of calling fiber
@@ -225,7 +194,7 @@ context::context( dispatcher_context_t, boost::context::preallocated const& pall
             // execute scheduler::dispatch()
             return sched->dispatch();
           }}
-#endif
+
 {}
 
 context::~context() {
@@ -247,11 +216,9 @@ context::resume() noexcept {
     // context_initializer::active_ will point to `this`
     // prev will point to previous active context
     std::swap( context_initializer::active_, prev);
-#if (BOOST_EXECUTION_CONTEXT==1)
-    detail::data_t d{};
-#else
+
     detail::data_t d{ prev };
-#endif
+
     resume_( d);
 }
 
@@ -261,11 +228,7 @@ context::resume( detail::spinlock_lock & lk) noexcept {
     // context_initializer::active_ will point to `this`
     // prev will point to previous active context
     std::swap( context_initializer::active_, prev);
-#if (BOOST_EXECUTION_CONTEXT==1)
-    detail::data_t d{ & lk };
-#else
     detail::data_t d{ & lk, prev };
-#endif
     resume_( d);
 }
 
@@ -275,11 +238,8 @@ context::resume( context * ready_ctx) noexcept {
     // context_initializer::active_ will point to `this`
     // prev will point to previous active context
     std::swap( context_initializer::active_, prev);
-#if (BOOST_EXECUTION_CONTEXT==1)
-    detail::data_t d{ ready_ctx };
-#else
     detail::data_t d{ ready_ctx, prev };
-#endif
+
     resume_( d);
 }
 
@@ -321,7 +281,7 @@ context::yield() noexcept {
     get_scheduler()->yield( context::active() );
 }
 
-#if (BOOST_EXECUTION_CONTEXT>1)
+
 boost::context::execution_context< detail::data_t * >
 context::suspend_with_cc() noexcept {
     context * prev = this;
@@ -332,13 +292,11 @@ context::suspend_with_cc() noexcept {
     // context switch
     return std::move( std::get< 0 >( ctx_( & d) ) );
 }
-#endif
 
-#if (BOOST_EXECUTION_CONTEXT==1)
-void
-#else
+
+
 boost::context::execution_context< detail::data_t * >
-#endif
+
 context::set_terminated() noexcept {
     // protect for concurrent access
     std::unique_lock< detail::spinlock > lk( splk_);
@@ -359,11 +317,7 @@ context::set_terminated() noexcept {
     }
     fss_data_.clear();
     // switch to another context
-#if (BOOST_EXECUTION_CONTEXT==1)
-    get_scheduler()->set_terminated( this);
-#else
     return get_scheduler()->set_terminated( this);
-#endif
 }
 
 bool
