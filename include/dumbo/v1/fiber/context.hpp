@@ -440,11 +440,7 @@ static boost::intrusive_ptr< context > make_worker_context( launch policy,
                                                      StackAlloc salloc,
                                                      Fn && fn, Args && ... args) {
     boost::context::stack_context sctx = salloc.allocate();
-#if defined(BOOST_NO_CXX14_CONSTEXPR) || defined(BOOST_NO_CXX11_STD_ALIGN)
-    // reserve space for control structure
-    const std::size_t size = sctx.size - sizeof( context);
-    void * sp = static_cast< char * >( sctx.sp) - sizeof( context);
-#else
+
     constexpr std::size_t func_alignment = 64; // alignof( context);
     constexpr std::size_t func_size = sizeof( context);
     // reserve space on stack
@@ -455,7 +451,7 @@ static boost::intrusive_ptr< context > make_worker_context( launch policy,
     BOOST_ASSERT( nullptr != sp);
     // calculate remaining size
     const std::size_t size = sctx.size - ( static_cast< char * >( sctx.sp) - static_cast< char * >( sp) );
-#endif
+
     // placement new of context on top of fiber's stack
     return boost::intrusive_ptr< context >( 
             ::new ( sp) context(
