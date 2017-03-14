@@ -313,21 +313,9 @@ context::set_ready( context * ctx) noexcept {
     BOOST_ASSERT( this != ctx);
     BOOST_ASSERT( nullptr != get_scheduler() );
     BOOST_ASSERT( nullptr != ctx->get_scheduler() );
-#if ! defined(DUMBO_FIBERS_NO_ATOMICS)
-    // FIXME: comparing scheduler address' must be synchronized?
-    //        what if ctx is migrated between threads
-    //        (other scheduler assigned)
-    if ( scheduler_ == ctx->get_scheduler() ) {
-        // local
-        get_scheduler()->set_ready( ctx);
-    } else {
-        // remote
-        ctx->get_scheduler()->set_remote_ready( ctx);
-    }
-#else
+
     BOOST_ASSERT( get_scheduler() == ctx->get_scheduler() );
     get_scheduler()->set_ready( ctx);
-#endif
 }
 
 void *

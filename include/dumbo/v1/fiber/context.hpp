@@ -153,17 +153,11 @@ private:
 
     typedef std::map< uintptr_t, fss_data >     fss_data_t;
 
-#if ! defined(DUMBO_FIBERS_NO_ATOMICS)
-    std::atomic< std::size_t >                      use_count_{ 0 };
-    std::atomic< unsigned int >                     flags_;
-    std::atomic< type >                             type_;
-    std::atomic< scheduler * >                      scheduler_{ nullptr };
-#else
     std::size_t                                     use_count_{ 0 };
     unsigned int                                    flags_;
     type                                            type_;
     scheduler                                   *   scheduler_{ nullptr };
-#endif
+
     launch                                          policy_{ launch::post };
     boost::context::execution_context< detail::data_t * >   ctx_;
 
@@ -305,11 +299,7 @@ public:
     virtual ~context();
 
     scheduler * get_scheduler() const noexcept {
-#if ! defined(DUMBO_FIBERS_NO_ATOMICS)
-        return scheduler_.load( std::memory_order_relaxed);
-#else
         return scheduler_;
-#endif
     }
 
     id get_id() const noexcept;

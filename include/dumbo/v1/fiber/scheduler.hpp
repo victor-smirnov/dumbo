@@ -77,12 +77,7 @@ private:
     worker_queue_t                      worker_queue_{};
     // terminated-queue contains context' which have been terminated
     terminated_queue_t                  terminated_queue_{};
-#if ! defined(DUMBO_FIBERS_NO_ATOMICS)
-    // remote ready-queue contains context' signaled by schedulers
-    // running in other threads
-    detail::context_mpsc_queue          remote_ready_queue_{};
-    // sleep-queue contains context' which have been called
-#endif
+
     // scheduler::wait_until()
     sleep_queue_t                       sleep_queue_{};
     bool                                shutdown_{ false };
@@ -90,10 +85,6 @@ private:
     context * get_next_() noexcept;
 
     void release_terminated_() noexcept;
-
-#if ! defined(DUMBO_FIBERS_NO_ATOMICS)
-    void remote_ready2ready_() noexcept;
-#endif
 
     void sleep2ready_() noexcept;
 
@@ -106,11 +97,6 @@ public:
     virtual ~scheduler();
 
     void set_ready( context *) noexcept;
-
-#if ! defined(DUMBO_FIBERS_NO_ATOMICS)
-    void set_remote_ready( context *) noexcept;
-#endif
-
 
     boost::context::execution_context< detail::data_t * > dispatch() noexcept;
 

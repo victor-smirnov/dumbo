@@ -46,17 +46,14 @@ public:
 
 private:
     struct node {
-        typedef intrusive_ptr< node >                   ptr_t;
+        typedef boost::intrusive_ptr< node >                   ptr_t;
         typedef typename std::allocator_traits< Allocator >::template rebind_alloc<
             node
         >                                               allocator_t;
         typedef std::allocator_traits< allocator_t >    allocator_traits_t;
 
-#if ! defined(DUMBO_FIBERS_NO_ATOMICS)
-        std::atomic< std::size_t >  use_count{ 0 };
-#else
         std::size_t                 use_count{ 0 };
-#endif
+
         allocator_t                 alloc;
         T                           va;
         ptr_t                       nxt{};
