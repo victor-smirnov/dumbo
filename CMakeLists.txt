@@ -16,7 +16,8 @@ include_directories(include)
 
 set_property (GLOBAL PROPERTY GLOBAL_SOURCES)
 
-add_subdirectory(src)
+add_subdirectory(src/fiber)
+
 
 get_property(GLOBAL_SRCS GLOBAL PROPERTY GLOBAL_SOURCES)
 
@@ -29,6 +30,6 @@ target_link_libraries(main boost_context Dumbo)
 
 SET_TARGET_PROPERTIES(main PROPERTIES COMPILE_FLAGS "-std=c++14 -Wfatal-errors -DDUMBO_FIBERS_NO_ATOMICS")
 
-add_subdirectory(tests)
+add_subdirectory(tests/fiber)
 
 install(TARGETS main RUNTIME DESTINATION bin)
