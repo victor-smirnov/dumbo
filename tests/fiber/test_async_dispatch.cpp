@@ -129,3 +129,9 @@ boost::unit_test_framework::test_suite* init_unit_test_suite(int, char*[]) {
 
     return test;
 }
+
+/*int BOOST_TEST_CALL_DECL
+main( int argc, char* argv[] )
+{
+    //return ::boost::unit_test::unit_test_main( &init_unit_test, argc, argv );
+}*/

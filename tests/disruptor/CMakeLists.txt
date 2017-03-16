@@ -13,12 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-file(GLOB SRCS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} *.cpp)
+file(GLOB SRCS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} *.cc)
 
 FOREACH(TEST_SOURCE ${SRCS})
     get_filename_component(TEST_TARGET ${TEST_SOURCE} NAME_WE)
+    
     add_executable(${TEST_TARGET} ${TEST_SOURCE})
-    SET_TARGET_PROPERTIES(${TEST_TARGET} PROPERTIES COMPILE_FLAGS "-Wfatal-errors -DBOOST_TEST_DYN_LINK -DBOOST_TEST_MAIN")
-    target_link_libraries(${TEST_TARGET} Dumbo boost_unit_test_framework boost_context boost_system boost_thread )
+    SET_TARGET_PROPERTIES(${TEST_TARGET} PROPERTIES COMPILE_FLAGS "-Wfatal-errors")
+    target_link_libraries(${TEST_TARGET} Dumbo boost_system boost_unit_test_framework)
     set_target_properties(${TEST_TARGET} PROPERTIES LINK_FLAGS "-pthread")
 ENDFOREACH()

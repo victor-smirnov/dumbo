@@ -14,8 +14,10 @@
 # limitations under the License.
 
 
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 3.1.0)
 project(fibers)
+
+set(CMAKE_CXX_STANDARD 14)
 
 find_package(
     Boost
@@ -33,6 +35,7 @@ include_directories(include)
 set_property (GLOBAL PROPERTY GLOBAL_SOURCES)
 
 add_subdirectory(src/fiber)
+add_subdirectory(src/reactor)
 
 
 get_property(GLOBAL_SRCS GLOBAL PROPERTY GLOBAL_SOURCES)
@@ -44,8 +47,9 @@ export(TARGETS Dumbo FILE ${LIBRARY_OUTPUT_PATH}/Dumbo.cmake)
 add_executable(main main.cpp )
 target_link_libraries(main boost_context Dumbo)
 
-SET_TARGET_PROPERTIES(main PROPERTIES COMPILE_FLAGS "-std=c++14 -Wfatal-errors -DDUMBO_FIBERS_NO_ATOMICS")
+SET_TARGET_PROPERTIES(main PROPERTIES COMPILE_FLAGS "-Wfatal-errors")
 
 add_subdirectory(tests/fiber)
+add_subdirectory(tests/disruptor)
 
 install(TARGETS main RUNTIME DESTINATION bin)
