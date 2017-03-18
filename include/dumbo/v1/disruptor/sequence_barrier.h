@@ -25,49 +25,60 @@
 
 #pragma once
 
-#include <memory>
-#include <vector>
-
 #include "wait_strategy.h"
 #include "sequence.h"
+
+#include <memory>
+#include <vector>
+#include <iostream>
 
 namespace dumbo {
 namespace v1 {
 namespace disruptor {
 
-template <typename W = kDefaultWaitStrategy>
-class SequenceBarrier {
- public:
-  SequenceBarrier(const Sequence& cursor,
-                  const std::vector<Sequence*>& dependents)
-      : cursor_(cursor), dependents_(dependents), alerted_(false) {}
 
-  int64_t WaitFor(const int64_t& sequence) {
-    return wait_strategy_.WaitFor(sequence, cursor_, dependents_, alerted_);
-  }
+    
+template <typename W, template <typename> class Container = StdVector>
+class SequenceBarrier
+{
+public:
+    SequenceBarrier ( const Sequence& cursor, const Container<Sequence*>& dependents)
+        : cursor_ ( cursor ), dependents_ ( dependents ), alerted_ ( false ) 
+    {}
 
-  template <class R, class P>
-  int64_t WaitFor(const int64_t& sequence,
-                  const std::chrono::duration<R, P>& timeout) {
-    return wait_strategy_.WaitFor(sequence, cursor_, dependents_, alerted_,
-                                  timeout);
-  }
+    int64_t WaitFor ( const int64_t& sequence )
+    {
+        return wait_strategy_.WaitFor ( sequence, cursor_, dependents_, alerted_ );
+    }
 
-  int64_t get_sequence() const { return cursor_.sequence(); }
+    template <class R, class P>
+    int64_t WaitFor ( const int64_t& sequence, const std::chrono::duration<R, P>& timeout )
+    {
+        return wait_strategy_.WaitFor ( sequence, cursor_, dependents_, alerted_, timeout );
+    }
 
-  bool alerted() const {
-    return alerted_.load(std::memory_order::memory_order_acquire);
-  }
+    int64_t get_sequence() const
+    {
+        return cursor_.sequence();
+    }
 
-  void set_alerted(bool alert) {
-    alerted_.store(alert, std::memory_order::memory_order_release);
-  }
+    bool alerted() const
+    {
+        return alerted_.load ( std::memory_order::memory_order_acquire );
+    }
 
- private:
-  W wait_strategy_;
-  const Sequence& cursor_;
-  std::vector<Sequence*> dependents_;
-  std::atomic<bool> alerted_;
+    void set_alerted ( bool alert )
+    {
+        alerted_.store ( alert, std::memory_order::memory_order_release );
+    }
+    
+private:
+    W wait_strategy_;
+    const Sequence& cursor_; // producer
+    Container<Sequence*> dependents_;
+    std::atomic<bool> alerted_;
 };
 
-}}}
+}
+}
+}

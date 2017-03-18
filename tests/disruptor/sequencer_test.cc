@@ -50,9 +50,8 @@ struct SequencerFixture {
     }
   }
 
-  Sequencer<long, RING_BUFFER_SIZE, SingleThreadedStrategy<RING_BUFFER_SIZE>,
-            kDefaultWaitStrategy> sequencer;
   std::array<long, RING_BUFFER_SIZE> events;
+  Sequencer<long, RING_BUFFER_SIZE, SingleThreadedStrategy<RING_BUFFER_SIZE>, kDefaultWaitStrategy> sequencer;
 };
 
 BOOST_FIXTURE_TEST_SUITE(SequencerBasic, SequencerFixture)

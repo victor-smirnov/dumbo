@@ -42,12 +42,13 @@ struct StrategyFixture {
   Sequence sequence_1;
   Sequence sequence_2;
   Sequence sequence_3;
-  std::vector<Sequence*> dependents;
+  
+  StdVector<Sequence*> dependents;
   W strategy;
   std::atomic<bool> alerted;
 
-  std::vector<Sequence*> allDependents() {
-    std::vector<Sequence*> d = {&sequence_1, &sequence_2, &sequence_3};
+  StdVector<Sequence*> allDependents() {
+    StdVector<Sequence*> d = {&sequence_1, &sequence_2, &sequence_3};
     return d;
   }
 };
@@ -69,6 +70,7 @@ BOOST_AUTO_TEST_CASE(WaitForCursor) {
     cursor.IncrementAndGet(1L);
     strategy.SignalAllWhenBlocking();
   }).join();
+  
   waiter.join();
   BOOST_CHECK_EQUAL(return_value.load(), kFirstSequenceValue);
 }

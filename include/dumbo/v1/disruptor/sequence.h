@@ -38,69 +38,85 @@
 
 #include "utils.h"
 
-namespace dumbo {
-namespace v1 {
-namespace disruptor {
+namespace dumbo
+{
+namespace v1
+{
+namespace disruptor
+{
 
 // special cursor values
 constexpr int64_t kInitialCursorValue = -1L;
 constexpr int64_t kAlertedSignal = -2L;
 constexpr int64_t kTimeoutSignal = -3L;
+constexpr int64_t kNotReadySignal = -4L;
 constexpr int64_t kFirstSequenceValue = kInitialCursorValue + 1L;
 
+template <typename T>
+using StdVector = std::vector<T>;
+
+template <typename T>
+using StdSingletonArray = std::array<T, 1>;
+
 // Sequence counter.
-class Sequence {
- public:
-  // Construct a sequence counter that can be tracked across threads.
-  //
-  // @param initial_value for the counter.
-  Sequence(int64_t initial_value = kInitialCursorValue)
-      : sequence_(initial_value) {}
+class Sequence
+{
+public:
+    // Construct a sequence counter that can be tracked across threads.
+    //
+    // @param initial_value for the counter.
+    Sequence ( int64_t initial_value = kInitialCursorValue )
+        : sequence_ ( initial_value ) {}
 
-  // Get the current value of the {@link Sequence}.
-  //
-  // @return the current value.
-  int64_t sequence() const {
-    return sequence_.load(std::memory_order::memory_order_acquire);
-  }
+    // Get the current value of the {@link Sequence}.
+    //
+    // @return the current value.
+    int64_t sequence() const
+    {
+        return sequence_.load ( std::memory_order::memory_order_acquire );
+    }
 
-  // Set the current value of the {@link Sequence}.
-  //
-  // @param the value to which the {@link Sequence} will be set.
-  void set_sequence(int64_t value) {
-    sequence_.store(value, std::memory_order::memory_order_release);
-  }
+    // Set the current value of the {@link Sequence}.
+    //
+    // @param the value to which the {@link Sequence} will be set.
+    void set_sequence ( int64_t value )
+    {
+        sequence_.store ( value, std::memory_order::memory_order_release );
+    }
 
-  // Increment and return the value of the {@link Sequence}.
-  //
-  // @param increment the {@link Sequence}.
-  // @return the new value incremented.
-  int64_t IncrementAndGet(const int64_t& increment) {
-    return sequence_.fetch_add(increment,
-                               std::memory_order::memory_order_release) +
-           increment;
-  }
+    // Increment and return the value of the {@link Sequence}.
+    //
+    // @param increment the {@link Sequence}.
+    // @return the new value incremented.
+    int64_t IncrementAndGet ( const int64_t& increment )
+    {
+        return sequence_.fetch_add ( increment, std::memory_order::memory_order_release ) + increment;
+    }
 
- private:
-  // padding
-  int64_t padding0_[ATOMIC_SEQUENCE_PADDING_LENGTH];
-  // members
-  std::atomic<int64_t> sequence_;
-  // padding
-  int64_t padding1_[ATOMIC_SEQUENCE_PADDING_LENGTH];
+private:
+    // padding
+    int64_t padding0_[ATOMIC_SEQUENCE_PADDING_LENGTH];
+    // members
+    std::atomic<int64_t> sequence_;
+    // padding
+    int64_t padding1_[ATOMIC_SEQUENCE_PADDING_LENGTH];
 
-  DISALLOW_COPY_MOVE_AND_ASSIGN(Sequence);
+    DISALLOW_COPY_MOVE_AND_ASSIGN ( Sequence );
 };
 
-int64_t GetMinimumSequence(const std::vector<Sequence*>& sequences) {
-  int64_t minimum = LONG_MAX;
+template <typename Container>
+int64_t GetMinimumSequence ( const Container& sequences )
+{
+    int64_t minimum = LONG_MAX;
 
-  for (Sequence* sequence_ : sequences) {
-    const int64_t sequence = sequence_->sequence();
-    minimum = minimum < sequence ? minimum : sequence;
-  }
+    for ( Sequence* sequence_ : sequences ) {
+        const int64_t sequence = sequence_->sequence();
+        minimum = minimum < sequence ? minimum : sequence;
+    }
 
-  return minimum;
+    return minimum;
 };
 
-}}}
+}
+}
+}

@@ -31,7 +31,7 @@
 #include "ring_buffer.h"
 
 namespace dumbo {
-namespace v1 {    
+namespace v1 {
 namespace disruptor {
 
 /*
@@ -67,93 +67,115 @@ using kDefaultClaimStrategy = SingleThreadedStrategy<kDefaultRingBufferSize>;
 
 // Optimised strategy can be used when there is a single publisher thread.
 template <size_t N = kDefaultRingBufferSize>
-class SingleThreadedStrategy {
- public:
-  SingleThreadedStrategy()
-      : last_claimed_sequence_(kInitialCursorValue),
-        last_consumer_sequence_(kInitialCursorValue) {}
+class SingleThreadedStrategy
+{
+public:
+    SingleThreadedStrategy()
+        : last_claimed_sequence_ ( kInitialCursorValue ),
+          last_consumer_sequence_ ( kInitialCursorValue ) {}
 
-  int64_t IncrementAndGet(const std::vector<Sequence*>& dependents,
-                          size_t delta = 1) {
-    const int64_t next_sequence = (last_claimed_sequence_ += delta);
-    const int64_t wrap_point = next_sequence - N;
-    if (last_consumer_sequence_ < wrap_point) {
-      while (GetMinimumSequence(dependents) < wrap_point) {
-        // TODO: configurable yield strategy
-        std::this_thread::yield();
-      }
+    template <typename Container>
+    int64_t IncrementAndGet ( const Container& dependents,
+                              size_t delta = 1 )
+    {
+        const int64_t next_sequence = ( last_claimed_sequence_ += delta );
+        const int64_t wrap_point = next_sequence - N;
+        if ( last_consumer_sequence_ < wrap_point ) {
+            while ( GetMinimumSequence ( dependents ) < wrap_point ) {
+                // TODO: configurable yield strategy
+                std::this_thread::yield();
+            }
+        }
+        return next_sequence;
     }
-    return next_sequence;
-  }
 
-  bool HasAvailableCapacity(const std::vector<Sequence*>& dependents) {
-    const int64_t wrap_point = last_claimed_sequence_ + 1L - N;
-    if (wrap_point > last_consumer_sequence_) {
-      const int64_t min_sequence = GetMinimumSequence(dependents);
-      last_consumer_sequence_ = min_sequence;
-      if (wrap_point > min_sequence) return false;
+    template <typename Container>
+    bool HasAvailableCapacity ( const Container& dependents )
+    {
+        const int64_t wrap_point = last_claimed_sequence_ + 1L - N;
+        if ( wrap_point > last_consumer_sequence_ ) {
+            const int64_t min_sequence = GetMinimumSequence ( dependents );
+            last_consumer_sequence_ = min_sequence;
+            if ( wrap_point > min_sequence ) {
+                return false;
+            }
+        }
+        return true;
     }
-    return true;
-  }
 
-  void SynchronizePublishing(const int64_t& sequence, const Sequence& cursor,
-                             const size_t& delta) {}
+    void SynchronizePublishing ( const int64_t& sequence, const Sequence& cursor,
+                                 const size_t& delta ) {}
 
- private:
-  // We do not need to use atomic values since this function is called by a
-  // single publisher.
-  int64_t last_claimed_sequence_;
-  int64_t last_consumer_sequence_;
+private:
+    // We do not need to use atomic values since this function is called by a
+    // single publisher.
+    int64_t last_claimed_sequence_;
+    int64_t last_consumer_sequence_;
 
-  DISALLOW_COPY_MOVE_AND_ASSIGN(SingleThreadedStrategy);
+    DISALLOW_COPY_MOVE_AND_ASSIGN ( SingleThreadedStrategy );
 };
 
 // Optimised strategy can be used when there is a single publisher thread.
 template <size_t N = kDefaultRingBufferSize>
-class MultiThreadedStrategy {
- public:
-  MultiThreadedStrategy() {}
+class MultiThreadedStrategy
+{
+public:
+    MultiThreadedStrategy() {}
 
-  int64_t IncrementAndGet(const std::vector<Sequence*>& dependents,
-                          size_t delta = 1) {
-    const int64_t next_sequence = last_claimed_sequence_.IncrementAndGet(delta);
-    const int64_t wrap_point = next_sequence - N;
-    if (last_consumer_sequence_.sequence() < wrap_point) {
-      while (GetMinimumSequence(dependents) < wrap_point) {
-        // TODO: configurable yield strategy
-        std::this_thread::yield();
-      }
+    template <typename Container>
+    int64_t IncrementAndGet ( const Container& dependents, size_t delta = 1 )
+    {
+        const int64_t next_sequence = last_claimed_sequence_.IncrementAndGet ( delta );
+        const int64_t wrap_point = next_sequence - N;
+        
+        if ( last_consumer_sequence_.sequence() < wrap_point ) 
+        {
+            while ( GetMinimumSequence ( dependents ) < wrap_point ) {
+                // TODO: configurable yield strategy
+                std::this_thread::yield();
+            }
+        }
+        
+        return next_sequence;
     }
-    return next_sequence;
-  }
 
-  bool HasAvailableCapacity(const std::vector<Sequence*>& dependents) {
-    const int64_t wrap_point = last_claimed_sequence_.sequence() + 1L - N;
-    if (wrap_point > last_consumer_sequence_.sequence()) {
-      const int64_t min_sequence = GetMinimumSequence(dependents);
-      last_consumer_sequence_.set_sequence(min_sequence);
-      if (wrap_point > min_sequence) return false;
+    template <typename Container>
+    bool HasAvailableCapacity ( const Container& dependents )
+    {
+        const int64_t wrap_point = last_claimed_sequence_.sequence() + 1L - N;
+        
+        if ( wrap_point > last_consumer_sequence_.sequence() ) 
+        {
+            const int64_t min_sequence = GetMinimumSequence ( dependents );
+            last_consumer_sequence_.set_sequence ( min_sequence );
+            
+            if ( wrap_point > min_sequence ) {
+                return false;
+            }
+        }
+        
+        return true;
     }
-    return true;
-  }
 
-  void SynchronizePublishing(const int64_t& sequence, const Sequence& cursor,
-                             const size_t& delta) {
-    int64_t my_first_sequence = sequence - delta;
+    void SynchronizePublishing ( const int64_t& sequence, const Sequence& cursor, const size_t& delta )
+    {
+        int64_t my_first_sequence = sequence - delta;
 
-    while (cursor.sequence() < my_first_sequence) {
-      // TODO: configurable yield strategy
-      std::this_thread::yield();
+        while ( cursor.sequence() < my_first_sequence ) {
+            // TODO: configurable yield strategy
+            std::this_thread::yield();
+        }
     }
-  }
 
- private:
-  Sequence last_claimed_sequence_;
-  Sequence last_consumer_sequence_;
+private:
+    Sequence last_claimed_sequence_;
+    Sequence last_consumer_sequence_;
 
-  DISALLOW_COPY_MOVE_AND_ASSIGN(MultiThreadedStrategy);
+    DISALLOW_COPY_MOVE_AND_ASSIGN ( MultiThreadedStrategy );
 };
 
-}}}
+}
+}
+}
 
 

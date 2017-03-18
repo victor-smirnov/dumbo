@@ -48,6 +48,7 @@ add_executable(main main.cpp )
 target_link_libraries(main boost_context Dumbo)
 
 SET_TARGET_PROPERTIES(main PROPERTIES COMPILE_FLAGS "-Wfatal-errors")
+set_target_properties(main PROPERTIES LINK_FLAGS "-pthread")
 
 add_subdirectory(tests/fiber)
 add_subdirectory(tests/disruptor)
