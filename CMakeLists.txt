@@ -52,5 +52,6 @@ set_target_properties(main PROPERTIES LINK_FLAGS "-pthread")
 
 add_subdirectory(tests/fiber)
 add_subdirectory(tests/disruptor)
+add_subdirectory(tests/reactor)
 
 install(TARGETS main RUNTIME DESTINATION bin)

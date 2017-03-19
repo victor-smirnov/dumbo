@@ -59,7 +59,7 @@ public:
     //
     // @param sequences_to_track this barrier will track.
     // @return the barrier gated as required.
-    std::unique_ptr<SequenceBarrier<W, Container>> NewBarrier ( const Container<Sequence*>& dependents = Container<Sequence*>({}))
+    std::unique_ptr<SequenceBarrier<W, Container>> NewBarrier ( const Container<Sequence*>& dependents = Container<Sequence*>())
     {
         return std::make_unique<SequenceBarrier<W, Container>> ( cursor_, dependents );
     }

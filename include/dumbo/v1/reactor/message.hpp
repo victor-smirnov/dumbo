@@ -15,19 +15,12 @@
 
 #pragma once
 
-#include "../smp_base.hpp"
 
-namespace dumbo {
-namespace v1 {
-namespace reactor {
-
-class Smp: public SmpBase <Smp> {
-public:
-    Smp(const Smp&) = delete;
-    Smp(Smp&&)      = delete;
-    
-    Smp(int cpu_num): SmpBase<Smp>(cpu_num) {}
-};
+#include "message/message.hpp"
+#include "message/app_message.hpp"
+#include "message/fiber_lambda_message.hpp"
+#include "message/fiber_message.hpp"
+#include "message/function_message.hpp"
+#include "message/lambda_message.hpp"
 
 
-}}}

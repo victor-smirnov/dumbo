@@ -15,42 +15,75 @@
 
 #pragma once
 
-#include <dumbo/v1/fiber/context.hpp>
+#include "../fiber/context.hpp"
+
+#include "mpsc_queue.hpp"
+#include "message.hpp"
+
+#include <vector>
+#include <memory>
+#include <tuple>
+#include <type_traits>
+
 
 namespace dumbo {
 namespace v1 {
 namespace reactor {
 
-using FiberContext = dumbo::v1::fibers::context;    
+using WorkerMessageQueue = MPSCQueue<Message*, 1024>;
+using WorkerMessageQueuePtr = std::unique_ptr<WorkerMessageQueue>;
+
+template <typename MyType>
+class SmpBase: public std::enable_shared_from_this<MyType> {
     
-class Message {
+    using Base = std::enable_shared_from_this<MyType>;
+    
+    using Base::shared_from_this;
+    
+    int cpu_num_;
+    
+    std::vector<WorkerMessageQueuePtr> inboxes_;
+    
+public:
+    SmpBase(int cpu_num): 
+        cpu_num_(cpu_num) 
+    {
+        for (int c = 0; c < cpu_num; c++)
+        {
+            inboxes_.push_back(std::make_unique<WorkerMessageQueue>());
+        }
+    }
+    
+    bool submit_to(int cpu, Message* msg) 
+    {
+        BOOST_ASSERT_MSG(cpu >= 0 && cpu < cpu_num_, "Invalid cpu number");
+        return inboxes_[cpu]->send(msg);
+    }
+    
+    template <typename Fn>
+    size_t receive(int cpu, size_t max_batch_size, Fn&& consumer) 
+    {
+        BOOST_ASSERT_MSG(cpu >= 0 && cpu < cpu_num_, "Invalid cpu number");
+        return inboxes_[cpu]->get(max_batch_size, std::forward<Fn>(consumer));
+    }
+    
+    template <typename Fn>
+    size_t receive_all(int cpu, Fn&& consumer) 
+    {
+        BOOST_ASSERT_MSG(cpu >= 0 && cpu < cpu_num_, "Invalid cpu number");
+        return inboxes_[cpu]->get_all(std::forward<Fn>(consumer));
+    }
+    
+    int cpu_num() const {return cpu_num_;}
+
+    friend class Application;
+    friend class Reactor;
+    
 protected:
-    int cpu_;
-    FiberContext* fiber_context_;
     
-    bool return_ {false};
-public:
-    Message(int cpu, FiberContext* fiber_context): 
-        cpu_(cpu), 
-        fiber_context_(fiber_context)
-    {}
-    
-    virtual ~Message() {}
-    
-    int cpu() const {return cpu_;}
-    bool is_return() const {return return_;}
-    FiberContext* fiber_context() {return fiber_context_;}
-    
-    virtual void process() = 0;
-    virtual void finish()  = 0;
-};
-    
-class SmpBase {
-public:
-    SmpBase();
-    
-    void submit_to(int cpu, const Message*);
-    Message* receive();
+    std::shared_ptr<MyType> self() {
+        return shared_from_this();
+    }
 };
     
 }}}

@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include "../fiber/all.hpp"
+
 #include "reactor.hpp"
 #include "linux/smp.hpp"
 
@@ -22,24 +24,65 @@
 #include <thread>
 #include <vector>
 #include <memory>
+#include <functional>
 
 namespace dumbo {
 namespace v1 {
 namespace reactor {
 
-class Application {
+class Application { //: public std::enable_shared_from_this<Application>
     
-    std::vector<std::unique_ptr<Reactor>> reactors_;
+    std::shared_ptr<Smp> smp_;
+    std::vector<std::shared_ptr<Reactor>> reactors_;
+    
+    std::function<void()> shutdown_hook_;
+    
+    static Application* application_;
     
 public:
     Application(int argc, char** argv): Application(argc, argv, nullptr) {}
-    Application(int argc, char** argv, char** envp);
+    Application( int argc, char** argv, char** envp );
     
     Application(const Application&) = delete;
-    Application(Application&&);
+    Application(Application&&) = delete;
     
-    void run(std::function<void()> fn);
+    Application& operator=(const Application&) = delete;
+    Application& operator=(Application&&) = delete;
     
+    
+    void set_shutdown_hook(const std::function<void()>& fn) {
+        shutdown_hook_ = fn;
+    }
+    
+    
+    template<typename Fn, typename... Args> 
+    auto run(Fn&& fn, Args&&... args) 
+    {
+        auto msg = make_special_one_way_lambda_message(0, std::forward<Fn>(fn), std::forward<Args>(args)...);
+        smp_->submit_to(0, msg.get());
+        
+        reactors_[0]->event_loop();
+        
+        for (auto& r: reactors_) 
+        {
+            r->join();
+        }
+        
+        return msg->result();
+    }
+    
+    friend Application& app();
+    
+    void shutdown() 
+    {
+        for (auto& r: reactors_) 
+        {
+            auto msg = new OneWayFunctionMessage(r->cpu(), shutdown_hook_);
+            smp_->submit_to(r->cpu(), msg);
+        }
+    }
 };
+
+Application& app();
     
 }}}

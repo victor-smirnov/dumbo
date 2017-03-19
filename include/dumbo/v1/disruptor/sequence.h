@@ -33,10 +33,10 @@
 #define SEQUENCE_PADDING_LENGTH (CACHE_LINE_SIZE_IN_BYTES - sizeof(int64_t)) / 8
 
 
+#include "utils.h"
 
 #include <atomic>
-
-#include "utils.h"
+#include <vector>
 
 namespace dumbo
 {
@@ -54,9 +54,6 @@ constexpr int64_t kFirstSequenceValue = kInitialCursorValue + 1L;
 
 template <typename T>
 using StdVector = std::vector<T>;
-
-template <typename T>
-using StdSingletonArray = std::array<T, 1>;
 
 // Sequence counter.
 class Sequence
