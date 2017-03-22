@@ -50,6 +50,8 @@ static boost::intrusive_ptr< context > make_dispatcher_context( scheduler * sche
 struct context_initializer {
     static thread_local context *   active_;
     static thread_local std::size_t counter_;
+    
+    static thread_local std::size_t contexts_;
 
     context_initializer() {
         if ( 0 == counter_++) {
@@ -105,6 +107,9 @@ struct context_initializer {
 // zero-initialization
 thread_local context * context_initializer::active_;
 thread_local std::size_t context_initializer::counter_;
+thread_local std::size_t context_initializer::contexts_ = 0;
+
+
 
 context *
 context::active() noexcept {
@@ -119,6 +124,9 @@ context::reset_active() noexcept {
     context_initializer::active_ = nullptr;
 }
 
+size_t context::contexts() noexcept {
+    return context_initializer::contexts_;
+}
 
 void
 context::resume_( detail::data_t & d) noexcept {
@@ -145,7 +153,9 @@ context::context( main_context_t) noexcept :
     use_count_{ 1 }, // allocated on main- or thread-stack
     flags_{ 0 },
     type_{ type::main_context },
-    ctx_{} {
+    ctx_{} 
+{
+    inc_contexts();
 }
 
 // dispatcher fiber context
@@ -166,8 +176,10 @@ context::context( dispatcher_context_t, boost::context::preallocated const& pall
             // execute scheduler::dispatch()
             return sched->dispatch();
           }}
-
-{}
+    
+{
+    inc_contexts();
+}
 
 context::~context() {
     BOOST_ASSERT( wait_queue_.empty() );
@@ -175,6 +187,8 @@ context::~context() {
     BOOST_ASSERT( ! sleep_is_linked() );
     BOOST_ASSERT( ! wait_is_linked() );
     delete properties_;
+    
+    context_initializer::contexts_--;
 }
 
 context::id
@@ -415,6 +429,10 @@ void
 context::attach( context * ctx) noexcept {
     BOOST_ASSERT( nullptr != ctx);
     get_scheduler()->attach_worker_context( ctx);
+}
+
+void context::inc_contexts() {
+    context_initializer::contexts_++;
 }
 
 }}}

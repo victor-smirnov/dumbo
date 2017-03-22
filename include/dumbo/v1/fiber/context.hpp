@@ -125,6 +125,8 @@ const dispatcher_context_t dispatcher_context{};
 struct worker_context_t {};
 const worker_context_t worker_context{};
 
+constexpr size_t DEFAULT_CONTEXTS = 2;
+
 class DUMBO_FIBERS_DECL context {
 private:
     friend class scheduler;
@@ -266,6 +268,8 @@ public:
     static context * active() noexcept;
 
     static void reset_active() noexcept;
+    
+    static size_t contexts() noexcept;
 
     // main fiber context
     explicit context( main_context_t) noexcept;
@@ -292,11 +296,13 @@ public:
                (boost::context::execution_context< detail::data_t * > && ctx, detail::data_t * dp) mutable noexcept {
                     return run_( std::forward< boost::context::execution_context< detail::data_t * > >( ctx), std::move( fn), std::move( tpl), dp);
               }}
-    {}
+    {
+        inc_contexts();
+    }
 
     context( context const&) = delete;
     context & operator=( context const&) = delete;
-
+    
     virtual ~context();
 
     scheduler * get_scheduler() const noexcept {
@@ -419,6 +425,10 @@ public:
             cc( nullptr);
         }
     }
+    
+private:
+    
+    void inc_contexts();
 };
 
 inline

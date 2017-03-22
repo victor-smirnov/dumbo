@@ -16,8 +16,11 @@
 #pragma once
 
 #include "scheduler.hpp"
+#include "file.hpp"
 
 #include "linux/smp.hpp"
+#include "thread_pool.hpp"
+
 
 #include <thread>
 #include <memory>
@@ -39,27 +42,12 @@ class Reactor: public std::enable_shared_from_this<Reactor> {
     
     Scheduler<Reactor>* scheduler_{};
     
+    ThreadPool thread_pool_;
+    
 public:
     
-    /*class ShutdownMessage: public Message {
-        Reactor* reactor_;
-    public:
-        ShutdownMessage(int cpu, Reactor* reactor): 
-            Message(cpu, true), reactor_(reactor) 
-        {}
-    
-        virtual void process() noexcept
-        {
-            reactor_->shutdown();
-        }
-        
-        virtual void finish() {}
-        
-        virtual std::string describe() {return "ShutdownMessage: ";}
-    };*/
-    
     Reactor(std::shared_ptr<Smp> smp, int cpu, bool own_thread):
-        smp_(smp), cpu_(cpu), own_thread_(own_thread)
+        smp_(smp), cpu_(cpu), own_thread_(own_thread), thread_pool_(1, 10, smp_)
     {
         std::atomic_thread_fence(std::memory_order_seq_cst);
     }
@@ -74,7 +62,6 @@ public:
     bool own_thread() const {return own_thread_;}
     
 
-    
     void join() 
     {
         if (own_thread())

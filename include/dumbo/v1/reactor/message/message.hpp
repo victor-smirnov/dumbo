@@ -28,6 +28,8 @@ protected:
     bool one_way_{false};
     bool return_{false};
     
+    void* data_{};
+    
     std::exception_ptr exception_;
     
 public:
@@ -43,6 +45,13 @@ public:
     bool is_one_way() const {return one_way_;}
     bool is_return() const {return return_;}
     bool is_exception() const {return exception_ != nullptr;}
+    
+    void* data() {return data_;}
+    void* data() const {return data_;}
+    
+    void set_data(void* custom_data) {data_ = custom_data;}
+    
+    
     
     void rethrow() const 
     {

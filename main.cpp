@@ -8,6 +8,12 @@
 namespace df  = dumbo::v1::fibers;
 namespace dr  = dumbo::v1::reactor;
 
+
+void print_fiber_sizes(const char* msg) 
+{
+    std::cout << "Contexts: " << msg << " -- " << df::context::contexts() << std::endl;
+}
+
 int main(int argc, char **argv) 
 {
     dr::Application app(argc, argv);
@@ -34,6 +40,76 @@ int main(int argc, char **argv)
     });
 
     std::cout << "vv = " << vv << std::endl;
+    
+    
+    /*
+    auto fn = [=]{
+        for (size_t c = 0; c < 1000; c++) {
+            dumbo::v1::this_fiber::yield();
+        }
+    };
+    
+    print_fiber_sizes("Before");
+    
+    df::fiber f0(fn);
+    
+    print_fiber_sizes("+1+");
+    
+    df::fiber f1(fn);
+    
+    print_fiber_sizes("+2+");
+    
+    df::fiber f2(fn);
+    
+    print_fiber_sizes("+3+");
+    
+    df::fiber f3(fn);
+    
+    print_fiber_sizes("+4+");
+    
+    df::fiber f4(fn);
+    
+    print_fiber_sizes("+5+");
+    
+    df::fiber f5(fn);
+    
+    print_fiber_sizes("+6+");
+    
+    df::fiber f6(fn);
+    
+    print_fiber_sizes("+7+");
+    
+    df::fiber f7(fn);
+    
+    print_fiber_sizes("+8+");
+    
+    df::fiber f8(fn);
+    
+    print_fiber_sizes("+9+");
+    
+    df::fiber f9(fn);
+    
+    print_fiber_sizes("+10+");
+    
+    f0.join();
+    
+    print_fiber_sizes("+j1+");
+    
+    f1.join();
+    
+    print_fiber_sizes("+j2+");
+    
+    f2.join();
+    f3.join();
+    f4.join();
+    f5.join();
+    f6.join();
+    f7.join();
+    f8.join();
+    f9.join();
+    
+    print_fiber_sizes("+N+");
+    */
     
     return 0;
 }
