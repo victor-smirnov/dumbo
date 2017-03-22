@@ -39,8 +39,6 @@ void Reactor::event_loop ()
     dumbo::v1::fibers::context::active()
         ->get_scheduler()
         ->set_algo(std::unique_ptr< Scheduler<Reactor> >(scheduler_));
-    
-    std::cout << "Contexts Begin: " << fibers::context::contexts() << std::endl;
         
     while(running_ && fibers::context::contexts() > fibers::DEFAULT_CONTEXTS) 
     {
@@ -73,11 +71,7 @@ void Reactor::event_loop ()
         dumbo::v1::this_fiber::yield();
     }
     
-    std::cout << "Contexts End: " << fibers::context::contexts() << std::endl;
-    
     thread_pool_.stop_workers();
-    
-    //std::cout << "Event loop finished for cpu " << cpu_ << std::endl;
 }
 
     

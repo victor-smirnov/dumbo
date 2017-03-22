@@ -68,8 +68,6 @@ namespace detail {
                     ready_ = false;
                     cv_.wait(lk, [this]{return ready_;});
                     
-                    std::cout << "Worker unlocked: " << stop_ << std::endl;
-                       
                     if (!stop_)
                     {
                         BOOST_ASSERT(task_);
