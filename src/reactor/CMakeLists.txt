@@ -13,6 +13,6 @@
 # limitations under the License.
 
 
-file(GLOB SRCS *.cpp)
+file(GLOB SRCS *.cpp linux/*.cpp)
 set_property(GLOBAL APPEND PROPERTY GLOBAL_SOURCES ${SRCS})
 

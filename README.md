@@ -4,7 +4,7 @@ Dumbo
 Introduction
 ------------
 
-Dumbo is an experimental MPP database engine as-a-service node build using Seastar, Memoria and LLVM JIT.
+Dumbo is an experimental MPP database engine as-a-service node built using Boost Fibers, Memoria and LLVM JIT.
 
 * It's [Seastar](http://www.seastar-project.org/)-like  event-driven framework providing fast lock-free 
     inter-thread communication, Asynchrous IO for SSDs and network, and fibers. Building around Boost Fibers for 
