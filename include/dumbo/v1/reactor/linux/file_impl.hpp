@@ -15,20 +15,88 @@
 
 #pragma once
 
+#include "../message/fiber_io_message.hpp"
+#include "buffer_vec.hpp"
+
+#include <stdint.h>
+#include <string>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <stdlib.h>
+
 namespace dumbo {
 namespace v1 {
 namespace reactor {
 
-class FileImpl {
+enum class FileFlags: int {
+    RDONLY      = O_RDONLY, 
+    WRONLY      = O_WRONLY, 
+    RDWR        = O_RDWR, 
+    TRUNCATE    = O_TRUNC, 
+    APPEND      = O_APPEND, 
+    CREATE      = O_CREAT, 
+    CLOEXEC     = O_CLOEXEC, 
+    
+    NONE = 0
+};
+
+static inline FileFlags operator|(FileFlags f1, FileFlags f2) {
+    return (FileFlags)((int)f1 | (int)f2);
+}
+
+enum class FileMode: mode_t {
+    IRWXU = S_IRWXU,
+    IRUSR = S_IRUSR,
+    IWUSR = S_IWUSR,
+    IXUSR = S_IXUSR,
+    IRWXG = S_IRWXG,
+    IRGRP = S_IRGRP,
+    IWGRP = S_IWGRP,
+    IXGRP = S_IXGRP,
+    IRWXO = S_IRWXO,
+    IROTH = S_IROTH,
+    IWOTH = S_IWOTH,
+    IXOTH = S_IXOTH,
+    ISUID = S_ISUID,
+    ISGID = S_ISGID,
+    ISVTX = S_ISVTX,
+    
+    IRWUSR = IRUSR | IWUSR,
+    IDEFLT = IRWUSR | IRGRP | IROTH
+};
+
+enum class FileSeek: int {
+    BEGIN   = SEEK_SET,
+    CURRENT = SEEK_CUR,
+    END     = SEEK_END
+};
+
+
+class File {
+    
+    FiberIOMessage message_;
+    
+    int fd_{};
+    std::string path_;
 public:
+    File (std::string path, FileFlags flags, FileMode mode = FileMode::IDEFLT);
+    virtual ~File() noexcept;
+    
     void close();
     
-    int64_t seek(int64_t pos);
-    int64_t read(void* buffer, int64_t size);
-    int64_t write(void* buffer, int64_t size);
+    int64_t seek(int64_t pos, FileSeek whence);
+    
+    void read(char* buffer, int64_t offset, int64_t size);
+    void read(BuffersBase& buffers, int64_t offset, int64_t size);
+    
+    
+    void write(const char* buffer, int64_t offset, int64_t size);
     
     void flush();
 };
-    
+
+
+
     
 }}}

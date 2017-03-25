@@ -15,13 +15,19 @@
 
 #pragma once
 
+#include "../../fiber/context.hpp"
+
 #include <exception>
 #include <string>
+
+
 
 namespace dumbo {
 namespace v1 {
 namespace reactor {
 
+using FiberContext = dumbo::v1::fibers::context;      
+    
 class Message {
 protected:
     int cpu_;

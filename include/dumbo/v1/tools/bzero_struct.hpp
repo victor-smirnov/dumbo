@@ -13,15 +13,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 #pragma once
 
-#include "linux/file_impl.hpp"
-
-#include <string>
+#include <cstring>
+#include <type_traits>
 
 namespace dumbo {
 namespace v1 {
-namespace reactor {
+namespace tools {
+
+template <typename StructT>
+StructT make_zeroed()
+{
+    static_assert(std::is_pod<StructT>::value, "");
+    
+    StructT result;
+    
+    std::memset(&result, 0, sizeof(result));
+    
+    return result;
+}
 
 
 }}}

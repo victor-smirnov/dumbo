@@ -39,37 +39,48 @@ void Reactor::event_loop ()
     dumbo::v1::fibers::context::active()
         ->get_scheduler()
         ->set_algo(std::unique_ptr< Scheduler<Reactor> >(scheduler_));
+
+    auto process_fn = [this](Message* msg) {
+        if (msg->is_return())
+        {
+            msg->finish();
+        }
+        else {
+            fibers::fiber ff([this, msg](){
+                msg->process();
+                if (!msg->is_one_way()) 
+                {
+                    smp_->submit_to(msg->cpu(), msg);
+                }
+                else {
+                    try {
+                        msg->finish();
+                    }
+                    catch (...) {
+                        std::terminate();
+                    }
+                }
+            });
+            
+            ff.detach();
+        }
+    };
         
-    while(running_ && fibers::context::contexts() > fibers::DEFAULT_CONTEXTS) 
+    while(running_ || fibers::context::contexts() > fibers::DEFAULT_CONTEXTS) 
     {
-        smp_->receive_all(cpu_, [this](Message* msg) {
-            if (msg->is_return())
-            {
-                msg->finish();
-            }
-            else {
-                fibers::fiber ff([this, msg](){
-                    msg->process();
-                    if (!msg->is_one_way()) 
-                    {
-                        smp_->submit_to(msg->cpu(), msg);
-                    }
-                    else {
-                        try {
-                            msg->finish();
-                        }
-                        catch (...) {
-                            std::terminate();
-                        }
-                    }
-                });
-                
-                ff.detach();
-            }
-        });
+        io_poller_.poll();
+        
+        while (ring_buffer_.available())
+        {
+            process_fn(ring_buffer_.pop_back());
+        }
+        
+        smp_->receive_all(cpu_, process_fn);
         
         dumbo::v1::this_fiber::yield();
     }
+    
+    std::cout << "Event Loop finished for " << cpu_ << std::endl;
     
     thread_pool_.stop_workers();
 }

@@ -20,6 +20,9 @@
 
 #include "linux/smp.hpp"
 #include "thread_pool.hpp"
+#include "ring_buffer.hpp"
+
+#include "linux/io_poller.hpp"
 
 
 #include <thread>
@@ -44,10 +47,15 @@ class Reactor: public std::enable_shared_from_this<Reactor> {
     
     ThreadPool thread_pool_;
     
+    RingBuffer<Message*> ring_buffer_{512};
+    
+    IOPoller io_poller_;
+    
 public:
     
     Reactor(std::shared_ptr<Smp> smp, int cpu, bool own_thread):
-        smp_(smp), cpu_(cpu), own_thread_(own_thread), thread_pool_(1, 10, smp_)
+        smp_(smp), cpu_(cpu), own_thread_(own_thread), thread_pool_(1, 10, smp_),
+        io_poller_(ring_buffer_)
     {
         std::atomic_thread_fence(std::memory_order_seq_cst);
     }
@@ -61,7 +69,9 @@ public:
     int cpu() const {return cpu_;}
     bool own_thread() const {return own_thread_;}
     
-
+    IOPoller& io_poller() {return io_poller_;}
+    const IOPoller& io_poller() const {return io_poller_;}
+    
     void join() 
     {
         if (own_thread())
@@ -96,6 +106,7 @@ public:
     friend class Application;
     friend Reactor& engine();
     template <typename> friend class FiberMessage;
+    friend class FiberIOMessage;
     
     void stop() {
         running_ = false;

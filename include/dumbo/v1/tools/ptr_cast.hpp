@@ -31,7 +31,7 @@ TypeTo* ptr_cast(TypeFrom* ptr)
     
     TypeTo* result;
     
-    std::memcpy(result, ptr, sizeof(ptr));
+    std::memcpy(&result, &ptr, sizeof(ptr));
     
     return result;
 }

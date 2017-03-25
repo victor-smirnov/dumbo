@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include "../../fiber/context.hpp"
 #include "message.hpp"
 
 #include <tuple>
@@ -24,39 +25,34 @@
 namespace dumbo {
 namespace v1 {
 namespace reactor {
-
-
-    
-
-template <typename Reactor>
-class FiberMessage: public Message {
+ 
+class FiberIOMessage: public Message {
 protected:
     
-    Reactor* reactor_;
     FiberContext* fiber_context_;
     
-    
 public:
-    FiberMessage(int cpu, Reactor* reactor, FiberContext* fiber_context): 
+    FiberIOMessage(int cpu, FiberContext* fiber_context = fibers::context::active()): 
         Message(cpu, false), 
-        reactor_(reactor),
         fiber_context_(fiber_context)
-    {}
-    
-    virtual ~FiberMessage() {}
-    
-    FiberContext* fiber_context() {return fiber_context_;}
-    
-    virtual void process() noexcept = 0;
-    virtual void finish() 
     {
-        BOOST_ASSERT_MSG(fiber_context_ != nullptr, "FiberContext is not set for a Message object");
-        reactor_->scheduler()->resume(fiber_context_);
+        return_ = true;
     }
     
-    Reactor* reactor() {return reactor_;}
-    const Reactor* reactor() const {return reactor_;}
+    virtual ~FiberIOMessage() {}
+    
+    FiberContext* fiber_context() {return fiber_context_;}
+    const FiberContext* fiber_context() const {return fiber_context_;}
+    
+    virtual void process() noexcept {}
+    
+    virtual void finish();
+    
+    virtual std::string describe();
+   
+    void wait_for();
 };
+
 
 
 

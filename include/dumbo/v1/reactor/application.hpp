@@ -19,6 +19,7 @@
 
 #include "reactor.hpp"
 #include "linux/smp.hpp"
+#include "linux/socket_impl.hpp"
 
 #include <functional>
 #include <thread>

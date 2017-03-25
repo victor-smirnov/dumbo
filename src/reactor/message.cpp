@@ -13,15 +13,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
 
-#include "linux/file_impl.hpp"
+#include <dumbo/v1/reactor/message/fiber_io_message.hpp>
+#include <dumbo/v1/reactor/reactor.hpp>
 
-#include <string>
+#include <boost/assert.hpp>
 
 namespace dumbo {
 namespace v1 {
 namespace reactor {
+    
+void FiberIOMessage::finish()
+{
+    BOOST_ASSERT_MSG(fiber_context_ != nullptr, "FiberContext is not set for a Message object");
+    engine().scheduler()->resume(fiber_context_);
+}    
 
 
+std::string FiberIOMessage::describe()
+{
+    return "FiberIOMessage";
+}
+
+
+void FiberIOMessage::wait_for()
+{
+    engine().scheduler()->suspend(fiber_context_);
+}
+
+    
 }}}

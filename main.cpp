@@ -27,14 +27,44 @@ int main(int argc, char **argv)
     auto vv = app.run([](){
         std::cout << "Hello from Dumbo App! " << std::endl;
         
-        auto value = dr::engine().run_at(1, [=]() {
+        /*auto value = dr::engine().run_at(1, [=]() {
             std::cout << "From thread " << dr::engine().cpu() << std::endl;
             return std::string("ABCDEF");
         });
     
         std::cout << "returned value = " << value << std::endl;
+        */
         
-        dr::app().shutdown();
+        try {
+            dr::File file("../file.bin", dr::FileFlags::RDWR);
+            
+            uint8_t* data = (uint8_t*)aligned_alloc(4096, 4096);
+            
+            for (int c = 0; c < 4096; c++) data[c] = 55;
+            
+            file.read((char*)data, 0, 512);
+            
+            for (int c = 0; c < 32; c++) 
+            {
+                std::cout << std::hex << (uint16_t) data[c] << std::dec << " ";
+            }
+            
+            std::cout << std::endl;
+            
+            file.write((char*)data+512, 512, 512);
+            
+            file.close();
+            
+            auto sbufv = dr::make_bufferv(data, 123456);
+            
+            std::cout << sbufv << std::endl;
+            
+            dr::app().shutdown();
+        }
+        catch (...) {
+            dr::app().shutdown();
+            throw;
+        }
         
         return 5678;
     });

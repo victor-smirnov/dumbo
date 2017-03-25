@@ -17,6 +17,7 @@
 
 #include "smp.hpp"
 #include "../message/message.hpp"
+#include "../ring_buffer.hpp"
 
 #include <memory>
 #include <thread>
@@ -31,27 +32,38 @@ namespace reactor {
 int io_setup(unsigned nr, aio_context_t *ctxp);
 int io_destroy(aio_context_t ctx);
 int io_submit(aio_context_t ctx, long nr,  struct iocb **iocbpp); 
-    
+
+using IOBuffer = RingBuffer<Message*>;
+
 class IOPoller {
-    std::shared_ptr<Smp> smp_;
-    int epoll_fd_{};
     
-    std::thread thread_;
+    static constexpr int BATCH_SIZE = 128;
+    
+    int epoll_fd_{};
+    int event_fd_{};
     
     aio_context_t aio_context_{};
     
-    bool running_{true};
+    
+    
+    IOBuffer& buffer_;
     
 public:
-    IOPoller(std::shared_ptr<Smp> smp):
-        smp_(smp), thread_([this]{do_polling();}) 
-    {}
+    IOPoller(IOBuffer& buffer);
     
     ~IOPoller();
-    void stop();
     
+    void poll();
+    
+    int epoll_fd() const {return epoll_fd_;}
+    int event_fd() const {return event_fd_;}
+    
+    aio_context_t aio_context() const {return aio_context_;}
+
 private:
-    void do_polling();
+    void poll_file_events(int buffer_capacity, int other_events);
+    
+    ssize_t read_eventfd();
 };
     
 }}}
