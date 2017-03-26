@@ -57,8 +57,6 @@ public:
     
     void set_data(void* custom_data) {data_ = custom_data;}
     
-    
-    
     void rethrow() const 
     {
         std::rethrow_exception(exception_);

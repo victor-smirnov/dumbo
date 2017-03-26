@@ -21,6 +21,7 @@
 #include <cstring>
 #include <cstdio>
 #include <exception>
+#include <iostream>
 
 
 namespace dumbo {
@@ -54,6 +55,15 @@ namespace tools {
     throw std::runtime_error(buf.str());
 }
 
+[[noreturn]] static inline void rise_perror(int errno0, const SBuf& message) 
+{
+    SBuf buf;
+    
+    buf << message.str() << ": " << std::strerror(errno0);
+
+    throw std::runtime_error(buf.str());
+}
+
 static inline void report_perror(const SBuf& message) 
 {
     SBuf buf;
@@ -63,6 +73,14 @@ static inline void report_perror(const SBuf& message)
     std::cout << "Exception: " << buf.str() << " -- errno: " << errno << std::endl;
 }
 
+static inline void report_perror(int errno0, const SBuf& message) 
+{
+    SBuf buf;
+    
+    buf << message.str() << ": " << std::strerror(errno0);
+
+    std::cout << "Exception: " << buf.str() << " -- errno: " << errno0 << std::endl;
+}
 
 
 [[noreturn]] static inline void rise_error(const SBuf& message) 

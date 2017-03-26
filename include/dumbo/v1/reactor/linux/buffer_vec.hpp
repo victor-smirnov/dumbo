@@ -15,6 +15,10 @@
 
 #pragma once
 
+#include "../message/message.hpp"
+#include "../../tools/bzero_struct.hpp"
+#include "../../tools/perror.hpp"
+
 #include <stdint.h>
 #include <string>
 #include <sys/types.h>
@@ -23,94 +27,161 @@
 #include <fcntl.h>
 #include <stdlib.h>
 
+#include <linux/aio_abi.h> 
+
 #include <iostream>
+#include <vector>
 
 namespace dumbo {
 namespace v1 {
 namespace reactor {
 
-
-class BuffersBase {
-public:
-    virtual ~BuffersBase() {}
+struct ExtendedIOCB: iocb {
+    int64_t processed;
+    uint64_t status;
     
-    virtual iovec* vectors() = 0;
-    virtual const iovec* vectors() const = 0;
-    virtual size_t num() const = 0;
-};
-
-
-template <size_t SIZE>
-class StaticBuffers: public BuffersBase {
-    iovec vec_[SIZE];
-public:
-    StaticBuffers() {}
-    
-    virtual ~StaticBuffers(){}
-    
-    virtual iovec* vectors() {return vec_;}
-    virtual const iovec* vectors() const {return vec_;}
-    
-    virtual size_t num() const {return SIZE;}
-    
-    iovec* vectors(size_t idx) {return &vec_[idx];}
-    const iovec* vectors(size_t idx) const {return &vec_[idx];}
-};
-
-template <size_t Size>
-std::ostream& operator<<(std::ostream& os, const StaticBuffers<Size>& buf) 
-{
-    bool first = true;
-    
-    os << "[";
-    
-    for (size_t c = 0; c < Size; c++)
-    {
-        if (!first) 
-        {
-            os << ", ";
-        }
-        else first = false;
-        
-        os << "{" << buf.vectors(c)->iov_base << ", " << buf.vectors(c)->iov_len << "}";
+    void dump(int cnt) const {
+        std::cout << cnt << ": " << aio_data << "," << aio_resfd << ", " << aio_offset << " " << std::endl;
     }
     
-    os << "]";
-    
-    return os;
-}
+    void configure(iocb& block, void* data, int64_t offset, int64_t size, int command)
+    {
+        block.aio_lio_opcode = command;
+        block.aio_reqprio = 0;
+        
+        block.aio_buf = (__u64) data;
+        block.aio_nbytes = size;
+        block.aio_offset = offset;
+        block.aio_flags = IOCB_FLAG_RESFD;
+    }
+};
 
-namespace detail {
-    struct StaticBuffersH {
-        template <size_t Idx, typename Buf, typename PtrT, typename SizeT, typename... Args>
-        static void process(Buf& buf, PtrT&& ptr, SizeT&& size, Args&&... args) 
+class IOBatchBase {
+public:
+    virtual ~IOBatchBase() {}
+    
+    virtual iocb** blocks(size_t from = 0) = 0;
+    virtual size_t nblocks() const = 0;
+    
+    virtual void configure(int fd, int event_fd, Message* message) = 0;
+    
+    virtual void set_submited(size_t num) = 0;
+    virtual size_t submited() const = 0;
+    
+    virtual void dump() const = 0;
+};
+
+
+
+
+
+class FileIOBatch: public IOBatchBase {
+    std::vector<ExtendedIOCB> blocks_;
+    std::vector<iocb*> pblocks_;
+    
+    
+    size_t submited_{};
+    
+public:
+    
+    void add_read(void* data, int64_t offset, int64_t size) 
+    {
+        ExtendedIOCB iocb = tools::make_zeroed<ExtendedIOCB>();
+        
+        iocb.configure(iocb, data, offset, size, IOCB_CMD_PREAD);
+        
+        blocks_.push_back(iocb);
+        pblocks_.push_back(nullptr);
+    }
+    
+    void add_write(const void* data, int64_t offset, int64_t size)
+    {
+        ExtendedIOCB iocb = tools::make_zeroed<ExtendedIOCB>();
+        
+        iocb.configure(iocb, const_cast<void*>(data), offset, size, IOCB_CMD_PWRITE);
+        
+        blocks_.push_back(iocb);
+        pblocks_.push_back(nullptr);
+    }
+    
+    
+    
+    ExtendedIOCB& block(size_t idx) {return blocks_[idx];}
+    const ExtendedIOCB& block(size_t idx) const {return blocks_[idx];}
+    
+    int64_t processed(size_t idx) const {
+        return blocks_[idx].processed;
+    }
+    
+    
+    uint64_t status(size_t idx) const {
+        return blocks_[idx].status;
+    }
+    
+    void check_status(int idx) const 
+    {
+        auto& block = blocks_[idx];
+        
+        if (block.processed < 0) 
         {
-            buf.vectors(Idx)->iov_base = ptr;
-            buf.vectors(Idx)->iov_len  = size;
-            
-            process<Idx + 1>(buf, std::forward<Args>(args)...);
+            tools::rise_perror(
+                -block.processed, 
+                tools::SBuf() 
+                    << "AIO " 
+                    <<  (block.aio_lio_opcode == IOCB_CMD_PREAD ? "read" : "write")
+                    << " operation failed"
+            );
+        }
+    }
+    
+    void check_status() const 
+    {
+        for (size_t c = 0; c < blocks_.size(); c++){
+            check_status(c);
+        }
+    }
+    
+    
+    
+    virtual iocb** blocks(size_t from = 0) 
+    {
+        for (size_t c = 0; c < blocks_.size(); c++){
+            pblocks_[c] = &blocks_[c];
         }
         
-        template <size_t Idx, typename Buf, typename PtrT, typename SizeT>
-        static void process(Buf& buf, PtrT&& ptr, SizeT&& size) 
+        return &pblocks_[from];
+    }
+    
+    virtual size_t nblocks() const {
+        return pblocks_.size();
+    }
+    
+    virtual void set_submited(size_t num) {
+        submited_ = num;
+    }
+    
+    virtual size_t submited() const {return submited_;}
+    
+    virtual void configure(int fd, int event_fd, Message* message)
+    {
+        for (auto& block: blocks_)
         {
-            buf.vectors(Idx)->iov_base = ptr;
-            buf.vectors(Idx)->iov_len  = size;
+            block.aio_data = (__u64) message;
+            block.aio_fildes = fd;
+            block.aio_resfd = event_fd;
         }
-    };
-}
-
-template <typename... Args>
-StaticBuffers<sizeof...(Args)/2> make_bufferv(Args&&... args)
-{
-    static_assert(sizeof...(Args) % 2 == 0, "Number of arguments must be even");
+    }
     
-    StaticBuffers<sizeof...(Args)/2> buf;
-    detail::StaticBuffersH::process<0>(buf, std::forward<Args>(args)...);
-    
-    return buf;
-}
-
+    virtual void dump() const 
+    {
+        int cnt = 0;
+        for (auto& block: blocks_)
+        {
+            block.dump(cnt);
+            cnt++;
+        }
+    }
+};
 
 
     

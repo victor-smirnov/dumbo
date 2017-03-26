@@ -17,6 +17,7 @@
 #include <dumbo/v1/reactor/linux/file_impl.hpp>
 #include <dumbo/v1/reactor/linux/io_poller.hpp>
 #include <dumbo/v1/reactor/reactor.hpp>
+#include <dumbo/v1/reactor/message/fiber_io_message.hpp>
 
 #include <dumbo/v1/tools/ptr_cast.hpp>
 #include <dumbo/v1/tools/bzero_struct.hpp>
@@ -42,9 +43,72 @@
 namespace dumbo {
 namespace v1 {
 namespace reactor {
+    
+class FileSingleIOMessage: public FileIOMessage {
+    
+    iocb block_;
+    
+    int64_t size_{};
+    uint64_t status_{};
+    
+    FiberContext* fiber_context_;
+    
+public:
+    FileSingleIOMessage(int cpu, int fd, int eventfd, char* buffer, int64_t offset, int64_t size, int command):
+        FileIOMessage(cpu),
+        block_(tools::make_zeroed<iocb>()),
+        fiber_context_(fibers::context::active())
+    {
+        block_.aio_fildes = fd;
+        block_.aio_lio_opcode = command;
+        block_.aio_reqprio = 0;
+        
+        block_.aio_buf = (__u64) buffer;
+        block_.aio_nbytes = size;
+        block_.aio_offset = offset;
+        block_.aio_flags = IOCB_FLAG_RESFD;
+        block_.aio_resfd = eventfd;
+        
+        block_.aio_data = (__u64) this;
+    }
+    
+    virtual ~FileSingleIOMessage() {}
+    
+    virtual void report(io_event* status) 
+    {
+        size_ = status->res;
+        status_ = status->res2;
+    }
+    
+    FiberContext* fiber_context() {return fiber_context_;}
+    const FiberContext* fiber_context() const {return fiber_context_;}
+    
+    virtual void process() noexcept {
+        return_ = true;
+    }
+    
+    virtual void finish() 
+    {
+        engine().scheduler()->resume(fiber_context_);
+    }
+    
+    virtual std::string describe() {
+        return "FileSingleIOMessage";
+    }
+   
+    void wait_for() {
+        engine().scheduler()->suspend(fiber_context_);
+    }
+    
+    int64_t size() const {return size_;}
+    uint64_t status() const {return status_;}
+    
+    iocb* block() {return &block_;}
+}; 
+    
 
 File::File(std::string path, FileFlags flags, FileMode mode): 
-    message_(engine().cpu()), path_(path) 
+    path_(path) 
 {
     fd_ = ::open(path_.c_str(), (int)flags | O_DIRECT, (mode_t)mode);
     if (fd_ < 0)
@@ -77,40 +141,14 @@ int64_t File::seek(int64_t pos, FileSeek whence)
     }
 }
 
-void File::read(char* buffer, int64_t offset, int64_t size) 
+
+int64_t File::process_single_io(char* buffer, int64_t offset, int64_t size, int command, const char* opname) 
 {
-    if (((size_t)buffer) % 512) 
-    {
-        tools::rise_error(tools::SBuf() << "Reading buffer address must be 512-aligned for " << path_);
-    }
-    
-    if (offset % 512) 
-    {
-        tools::rise_error(tools::SBuf() << "Reading offset must be multiple of 512 for " << path_);
-    }
-    
-    if (size % 512) 
-    {
-        tools::rise_error(tools::SBuf() << "Reading size must be multiple of 512 for " << path_);
-    }
-    
     Reactor& r = engine();
     
-    iocb block = tools::make_zeroed<iocb>();
+    FileSingleIOMessage message(r.cpu(), fd_, r.io_poller().event_fd(), buffer, offset, size, command);
     
-    block.aio_fildes = fd_;
-    block.aio_lio_opcode = IOCB_CMD_PREAD;
-    block.aio_reqprio = 0;
-    block.aio_buf = (__u64) buffer;
-    block.aio_nbytes = size;
-    block.aio_offset = offset;
-    block.aio_flags = IOCB_FLAG_RESFD;
-    block.aio_resfd = r.io_poller().event_fd();
-    
-    block.aio_data = (__u64) &message_;
-    
-    
-    iocb* pblock = &block;
+    iocb* pblock = message.block();
     
     while (true) 
     {
@@ -118,74 +156,152 @@ void File::read(char* buffer, int64_t offset, int64_t size)
     
         if (res > 0) 
         {
-            message_.wait_for();
-            return;
+            message.wait_for();
+            
+            if (message.size() < 0) {
+                tools::rise_perror(-message.size(), tools::SBuf() << "AIO " << opname << " operation failed for file " << path_);
+            }
+            
+            return message.size();
         } 
         else if (res < 0)
         {
-            tools::rise_perror(tools::SBuf() << "Can't submit AIO read operation for file " << path_);
+            tools::rise_perror(tools::SBuf() << "Can't submit AIO " << opname << " operation for file " << path_);
         }
     }
 }
 
 
+int64_t File::read(char* buffer, int64_t offset, int64_t size) 
+{    
+    return process_single_io(buffer, offset, size, IOCB_CMD_PREAD, "read");
+}
 
 
-void File::write(const char* buffer, int64_t offset, int64_t size)
+
+
+int64_t File::write(const char* buffer, int64_t offset, int64_t size)
+{    
+    return process_single_io(const_cast<char*>(buffer), offset, size, IOCB_CMD_PWRITE, "write");
+}
+
+
+
+
+
+
+
+
+class FileMultiIOMessage: public FileIOMessage {
+    
+    IOBatchBase& batch_;
+    size_t remaining_{};
+    
+    FiberContext* fiber_context_;
+    
+public:
+    FileMultiIOMessage(int cpu, int fd, int event_fd, IOBatchBase& batch):
+        FileIOMessage(cpu),
+        batch_(batch),
+        remaining_(batch.nblocks()),
+        fiber_context_(fibers::context::active())
+    {
+        batch.configure(fd, event_fd, this);
+        return_ = true;
+    }
+    
+    virtual ~FileMultiIOMessage() {}
+    
+    virtual void report(io_event* status) 
+    {
+        ExtendedIOCB* eiocb = tools::ptr_cast<ExtendedIOCB>((char*)status->obj);
+        eiocb->processed    = status->res;
+        eiocb->status       = status->res2;
+    }
+    
+    FiberContext* fiber_context() {return fiber_context_;}
+    const FiberContext* fiber_context() const {return fiber_context_;}
+    
+    virtual void process() noexcept {}
+    
+    virtual void finish() 
+    {
+        if (--remaining_ == 0) 
+        {
+            engine().scheduler()->resume(fiber_context_);
+        }
+    }
+    
+    virtual std::string describe() {
+        return "FileMultiIOMessage";
+    }
+   
+    void wait_for() {
+        engine().scheduler()->suspend(fiber_context_);
+    }
+    
+    void add_submited(size_t num) 
+    {
+        remaining_ = num;
+        batch_.set_submited(batch_.submited() + num);
+    }
+}; 
+
+
+
+
+
+
+size_t File::process_batch(IOBatchBase& batch, bool rise_ex_on_error) 
 {
-    if (((size_t)buffer) % 512) 
-    {
-        tools::rise_error(tools::SBuf() << "Writing buffer address must be 512-aligned for " << path_);
-    }
-    
-    
-    if (offset % 512) 
-    {
-        tools::rise_error(tools::SBuf() << "Writing offset must be multiple of 512 for " << path_);
-    }
-    
-    if (size % 512) 
-    {
-        tools::rise_error(tools::SBuf() << "Writing size must be multiple of 512 for " << path_);
-    }
-    
     Reactor& r = engine();
     
-    iocb block = tools::make_zeroed<iocb>();
+    FileMultiIOMessage message(r.cpu(), fd_, r.io_poller().event_fd(), batch);
     
-    block.aio_fildes = fd_;
-    block.aio_lio_opcode = IOCB_CMD_PWRITE;
-    block.aio_reqprio = 0;
-    block.aio_buf = (__u64) buffer;
-    block.aio_nbytes = size;
-    block.aio_offset = offset;
-    block.aio_flags = IOCB_FLAG_RESFD;
-    block.aio_resfd = r.io_poller().event_fd();
+    size_t total = batch.nblocks();
+    size_t done = 0;
     
-    block.aio_data = (__u64) &message_;
-    
-    iocb* pblock = &block;
-    
-    while (true) 
+    while (done < total)
     {
-        int res = io_submit(r.io_poller().aio_context(), 1, &pblock);
+        iocb** pblock = batch.blocks(done);
+        int to_submit = total - done;
+        int res = io_submit(r.io_poller().aio_context(), to_submit, pblock);
     
-        if (res > 0) 
+        if (res > 0)
         {
-            message_.wait_for();
-            return;
+            message.add_submited(res);
+            
+            message.wait_for();
+            
+            done += res;
         } 
         else if (res < 0)
         {
-            tools::rise_perror(tools::SBuf() << "Can't submit AIO write operation for file " << path_);
+            tools::rise_perror(tools::SBuf() << "Can't submit AIO batch operations for file " << path_);
+        }
+        else {
+            return 0;
         }
     }
-}
-
-void File::flush()
-{
     
+    return done;
 }
 
+
+
+
+
+
+
+
+void File::fsync()
+{
+    // NOOP at the moment
+}
+
+void File::fdsync()
+{
+    // NOOP at the moment
+}
     
 }}}

@@ -47,7 +47,7 @@ class Reactor: public std::enable_shared_from_this<Reactor> {
     
     ThreadPool thread_pool_;
     
-    RingBuffer<Message*> ring_buffer_{512};
+    RingBuffer<Message*> ring_buffer_{16384};
     
     IOPoller io_poller_;
     
@@ -112,6 +112,9 @@ public:
         running_ = false;
     }
     
+    Scheduler<Reactor>* scheduler() {return scheduler_;}
+    const Scheduler<Reactor>* scheduler() const {return scheduler_;}
+    
 private:
     
     static thread_local Reactor* local_engine_;
@@ -138,8 +141,7 @@ private:
         running_ = false;
     }
     
-    Scheduler<Reactor>* scheduler() {return scheduler_;}
-    const Scheduler<Reactor>* scheduler() const {return scheduler_;}
+
 };
 
 Reactor& engine();

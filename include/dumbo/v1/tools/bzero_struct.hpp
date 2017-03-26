@@ -26,7 +26,7 @@ namespace tools {
 template <typename StructT>
 StructT make_zeroed()
 {
-    static_assert(std::is_pod<StructT>::value, "");
+    static_assert(std::is_trivial<StructT>::value, "");
     
     StructT result;
     
@@ -34,6 +34,7 @@ StructT make_zeroed()
     
     return result;
 }
+
 
 
 }}}

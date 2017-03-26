@@ -17,6 +17,7 @@
 
 #include "../message/fiber_io_message.hpp"
 #include "buffer_vec.hpp"
+#include "io_poller.hpp"
 
 #include <stdint.h>
 #include <string>
@@ -74,9 +75,6 @@ enum class FileSeek: int {
 
 
 class File {
-    
-    FiberIOMessage message_;
-    
     int fd_{};
     std::string path_;
 public:
@@ -87,13 +85,16 @@ public:
     
     int64_t seek(int64_t pos, FileSeek whence);
     
-    void read(char* buffer, int64_t offset, int64_t size);
-    void read(BuffersBase& buffers, int64_t offset, int64_t size);
+    int64_t read(char* buffer, int64_t offset, int64_t size);
+    int64_t write(const char* buffer, int64_t offset, int64_t size);
     
+    size_t process_batch(IOBatchBase& batch, bool rise_ex_on_error = true);
     
-    void write(const char* buffer, int64_t offset, int64_t size);
+    void fsync();
+    void fdsync();
     
-    void flush();
+private:
+    int64_t process_single_io(char* buffer, int64_t offset, int64_t size, int command, const char* opname);
 };
 
 

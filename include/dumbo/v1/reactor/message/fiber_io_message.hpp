@@ -29,11 +29,14 @@ namespace reactor {
 class FiberIOMessage: public Message {
 protected:
     
+    size_t count_;
     FiberContext* fiber_context_;
     
+    
 public:
-    FiberIOMessage(int cpu, FiberContext* fiber_context = fibers::context::active()): 
+    FiberIOMessage(int cpu, size_t count = 1, FiberContext* fiber_context = fibers::context::active()): 
         Message(cpu, false), 
+        count_(count),
         fiber_context_(fiber_context)
     {
         return_ = true;
@@ -51,6 +54,8 @@ public:
     virtual std::string describe();
    
     void wait_for();
+    
+    size_t count() const {return count_;}
 };
 
 

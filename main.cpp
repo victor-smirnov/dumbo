@@ -38,12 +38,21 @@ int main(int argc, char **argv)
         try {
             dr::File file("../file.bin", dr::FileFlags::RDWR);
             
-            uint8_t* data = (uint8_t*)aligned_alloc(4096, 4096);
+            int buf_size = 4096*1024;
+            uint8_t* data = (uint8_t*)aligned_alloc(4096, buf_size);
             
-            for (int c = 0; c < 4096; c++) data[c] = 55;
+            for (int c = 0; c < buf_size; c++) {data[c] = 0xEE;}
             
-            file.read((char*)data, 0, 512);
+            dr::FileIOBatch batch;
             
+            for (int c = 0; c < 2000; c++) 
+            {
+                batch.add_read(data + c * 512, c * 512, 512);
+            }
+            
+            //std::cout << "process batch1: " << file.process_batch(batch) << " -- " << batch.submited() << std::endl;
+                      
+                        
             for (int c = 0; c < 32; c++) 
             {
                 std::cout << std::hex << (uint16_t) data[c] << std::dec << " ";
@@ -51,13 +60,17 @@ int main(int argc, char **argv)
             
             std::cout << std::endl;
             
-            file.write((char*)data+512, 512, 512);
+            
+            dr::FileIOBatch batch2;
+            
+            for (int c = 0; c < 2000; c++) 
+            {
+                batch2.add_write(data + c * 512, c * 512, 512);
+            }
+            
+            std::cout << "process batch2: " << file.process_batch(batch2) << " -- " << batch2.submited() << std::endl;
             
             file.close();
-            
-            auto sbufv = dr::make_bufferv(data, 123456);
-            
-            std::cout << sbufv << std::endl;
             
             dr::app().shutdown();
         }

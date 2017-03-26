@@ -25,8 +25,10 @@ namespace reactor {
     
 void FiberIOMessage::finish()
 {
-    BOOST_ASSERT_MSG(fiber_context_ != nullptr, "FiberContext is not set for a Message object");
-    engine().scheduler()->resume(fiber_context_);
+    if (--count_ == 0) 
+    {
+        engine().scheduler()->resume(fiber_context_);
+    }
 }    
 
 

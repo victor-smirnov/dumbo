@@ -86,13 +86,17 @@ IOPoller::IOPoller(IOBuffer& buffer):buffer_(buffer)
     assert_ok(event_fd_, "Can't initialize file EVENTFD subsystem");
     
     epoll_event ev0;
-    ev0.events = EPOLLIN | EPOLLOUT | EPOLLET;
+    ev0.events = EPOLLIN | EPOLLOUT ; //| EPOLLET
     ev0.data.ptr = &event_fd_;
     
     assert_ok(
         epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, event_fd_, &ev0),
         "Can't configure EPOLLFD"
     );
+    
+    //eventfd_read();
+    
+    
 }
 
 IOPoller::~IOPoller() 
@@ -161,7 +165,9 @@ void IOPoller::poll_file_events(int buffer_capacity, int other_events)
     {
         for (int c = 0; c < e_num; c++)
         {
-            Message* msg = tools::ptr_cast<Message>((void*)events[c].data);
+            FileIOMessage* msg = tools::ptr_cast<FileIOMessage>((void*)events[c].data);
+            msg->process();
+            msg->report(&events[c]);
             buffer_.push_front(msg);
         }
     }
@@ -173,7 +179,9 @@ void IOPoller::poll_file_events(int buffer_capacity, int other_events)
     
 ssize_t IOPoller::read_eventfd() 
 {
-    char data[8];
+    return true;//for now
+    
+    /*char data[8];
     ssize_t res = ::read(event_fd_, data, sizeof(data));
     
     if (res == 8) {
@@ -185,7 +193,7 @@ ssize_t IOPoller::read_eventfd()
     else {
         tools::report_perror(tools::SBuf() << "Can't read counters form eventfd. Aborting. ");
         std::terminate();
-    }
+    }*/
 }
 
     

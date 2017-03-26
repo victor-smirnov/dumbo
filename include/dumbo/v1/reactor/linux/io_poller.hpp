@@ -35,9 +35,15 @@ int io_submit(aio_context_t ctx, long nr,  struct iocb **iocbpp);
 
 using IOBuffer = RingBuffer<Message*>;
 
+class FileIOMessage: public Message {
+public:
+    FileIOMessage(int cpu): Message(cpu, false) {}
+    virtual void report(io_event* status) = 0;
+};
+
 class IOPoller {
     
-    static constexpr int BATCH_SIZE = 128;
+    static constexpr int BATCH_SIZE = 512;
     
     int epoll_fd_{};
     int event_fd_{};
