@@ -18,11 +18,18 @@
 #include "scheduler.hpp"
 #include "file.hpp"
 
+#ifdef _WIN32
+#include "msvc/msvc_io_poller.hpp"
+#include "msvc/msvc_smp.hpp"
+#else
 #include "linux/smp.hpp"
+#include "linux/io_poller.hpp"
+#endif
+
 #include "thread_pool.hpp"
 #include "ring_buffer.hpp"
 
-#include "linux/io_poller.hpp"
+
 
 
 #include <thread>

@@ -1,2 +1,8 @@
 .kdev4
 build*
+*build*.bat
+*build*.sh
+log*
+*.dir
+x64
+x86

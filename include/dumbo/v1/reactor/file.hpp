@@ -15,7 +15,10 @@
 
 #pragma once
 
+#ifdef _WIN32
+#else
 #include "linux/file_impl.hpp"
+#endif
 
 #include <string>
 

@@ -19,7 +19,12 @@ FOREACH(TEST_SOURCE ${SRCS})
     get_filename_component(TEST_TARGET ${TEST_SOURCE} NAME_WE)
     
     add_executable(${TEST_TARGET} ${TEST_SOURCE})
-    SET_TARGET_PROPERTIES(${TEST_TARGET} PROPERTIES COMPILE_FLAGS "-Wfatal-errors")
-    target_link_libraries(${TEST_TARGET} Dumbo boost_system boost_unit_test_framework)
-    set_target_properties(${TEST_TARGET} PROPERTIES LINK_FLAGS "-pthread")
+    SET_TARGET_PROPERTIES(${TEST_TARGET} PROPERTIES COMPILE_FLAGS "${DUMBO_COMPILE_PROPERTIES}")
+    
+    if(NOT ${BUILD_WINDOWS})
+        target_link_libraries(${TEST_TARGET} Dumbo boost_system boost_unit_test_framework)
+    endif()
+
+    set_target_properties(${TEST_TARGET} PROPERTIES LINK_FLAGS "${DUMBO_LINK_PROPERTIES}")
+
 ENDFOREACH()

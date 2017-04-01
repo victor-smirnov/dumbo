@@ -12,7 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+if (${BUILD_WINDOWS})
+	file(GLOB SRCS *.cpp msvc/*.cpp)
+else()
+	file(GLOB SRCS *.cpp linux/*.cpp)
+endif()
 
-file(GLOB SRCS *.cpp linux/*.cpp)
 set_property(GLOBAL APPEND PROPERTY GLOBAL_SOURCES ${SRCS})
 

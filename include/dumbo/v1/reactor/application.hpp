@@ -18,8 +18,16 @@
 #include "../fiber/all.hpp"
 
 #include "reactor.hpp"
+
+#ifndef _WIN32
 #include "linux/smp.hpp"
 #include "linux/socket_impl.hpp"
+#else
+#include "msvc/msvc_smp.hpp"
+#include "msvc/msvc_socket_impl.hpp"
+#endif
+
+
 
 #include <functional>
 #include <thread>

@@ -15,17 +15,21 @@
 
 #pragma once
 
-#ifdef _WIN32
-#else
-#include "linux/file_impl.hpp"
-#endif
+//#define WIN32_LEAN_AND_MEAN
 
-#include <string>
+#include "../smp_base.hpp"
 
 namespace dumbo {
 namespace v1 {
 namespace reactor {
 
+class Smp: public SmpBase <Smp> {
+public:
+    Smp(const Smp&) = delete;
+    Smp(Smp&&)      = delete;
+    
+    Smp(int cpu_num): SmpBase<Smp>(cpu_num) {}
+};
 
 
 }}}

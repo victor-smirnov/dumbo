@@ -15,7 +15,12 @@
 
 #pragma once
 
+#ifdef _WIN32
+#include "msvc/msvc_smp.hpp"
+#else
 #include "linux/smp.hpp"
+#endif
+
 #include "message/message.hpp"
 
 #include "../tools/ptr_cast.hpp"

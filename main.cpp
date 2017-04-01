@@ -16,6 +16,15 @@ void print_fiber_sizes(const char* msg)
 
 int main(int argc, char **argv) 
 {
+	WSADATA wsaData = { 0 };
+
+	// Initialize Winsock
+	int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+	if (iResult != 0) {
+		wprintf(L"WSAStartup failed: %d\n", iResult);
+		return 1;
+	}
+
     dr::Application app(argc, argv);
     
     app.set_shutdown_hook([](){
@@ -27,67 +36,32 @@ int main(int argc, char **argv)
     auto vv = app.run([](){
         std::cout << "Hello from Dumbo App! " << std::endl;
         
-        /*auto value = dr::engine().run_at(1, [=]() {
-            std::cout << "From thread " << dr::engine().cpu() << std::endl;
-            return std::string("ABCDEF");
-        });
-    
-        std::cout << "returned value = " << value << std::endl;
-        */
-        
-        try {
-            dr::File file("../file.bin", dr::FileFlags::RDWR);
-            
-            int buf_size = 4096*1024;
-            uint8_t* data = (uint8_t*)aligned_alloc(4096, buf_size);
-            
-            for (int c = 0; c < buf_size; c++) {data[c] = 0xEE;}
-            
-            dr::FileIOBatch batch;
-            
-            for (int c = 0; c < 2000; c++) 
-            {
-                batch.add_read(data + c * 512, c * 512, 512);
-            }
-            
-            //std::cout << "process batch1: " << file.process_batch(batch) << " -- " << batch.submited() << std::endl;
-                      
-                        
-            for (int c = 0; c < 32; c++) 
-            {
-                std::cout << std::hex << (uint16_t) data[c] << std::dec << " ";
-            }
-            
-            std::cout << std::endl;
-            
-            
-            dr::FileIOBatch batch2;
-            
-            for (int c = 0; c < 2000; c++) 
-            {
-                batch2.add_write(data + c * 512, c * 512, 512);
-            }
-            
-            std::cout << "process batch2: " << file.process_batch(batch2) << " -- " << batch2.submited() << std::endl;
-            
-            file.close();
-            
-            dr::app().shutdown();
-        }
-        catch (...) {
-            dr::app().shutdown();
-            throw;
-        }
-        
+		dr::IPAddress addr("127.0.0.1");
+
+		auto socket = std::make_shared<dr::StreamServerSocket>(addr, 5544);
+		socket->listen();
+		auto conn = socket->accept();
+
+		char buffer[4096];
+		
+		int64_t size;
+		while ((size = conn->read(buffer, sizeof(buffer))) > 0) 
+		{			
+			std::cout << "Read " << size << " bytes" << std::endl;
+			conn->write(buffer, size);
+		}
+
+		dr::app().shutdown();
+
         return 5678;
     });
 
     std::cout << "vv = " << vv << std::endl;
     
-    
     /*
+    
     auto fn = [=]{
-        for (size_t c = 0; c < 1000; c++) {
+        for (size_t c = 0; c < 10000000; c++) {
             dumbo::v1::this_fiber::yield();
         }
     };
