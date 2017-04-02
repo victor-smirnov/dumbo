@@ -36,7 +36,10 @@ int main(int argc, char **argv)
     auto vv = app.run([](){
         std::cout << "Hello from Dumbo App! " << std::endl;
         
-		dr::IPAddress addr("127.0.0.1");
+		using namespace dr;
+
+		
+		/*IPAddress addr("127.0.0.1");
 
 		auto socket = std::make_shared<dr::StreamServerSocket>(addr, 5544);
 		socket->listen();
@@ -49,84 +52,63 @@ int main(int argc, char **argv)
 		{			
 			std::cout << "Read " << size << " bytes" << std::endl;
 			conn->write(buffer, size);
-		}
+		}*/
+		
+		
 
-		dr::app().shutdown();
+			size_t buf_size = 1024 * 4096;
+			auto buf = dr::allocate_dma_buffer(buf_size);
+			for (size_t c = 0; c < buf_size; c++) {
+				buf.get()[c] = 0;
+			}
+
+			File file("data.bin", FileFlags::DEFAULT | FileFlags::CREATE, FileMode::IDEFLT);
+
+			FileIOBatch batch;
+
+			for (int c = 0; c < buf_size; c += 512)
+			{
+				batch.add_read(buf.get() + c, c, 512 + (c > 512*10));
+			}
+
+			int processed = 0;
+
+			try {
+				processed = file.process_batch(batch, false);
+			}
+			catch (std::exception& ex) {
+				std::cout << ex.what() << std::endl;
+			}
+
+			std::cout << "Submited " << processed << " of " << batch.nblocks() << std::endl;
+
+			for (int c = 0; c < 512; c++)
+			{
+				std::cout.precision(5);
+				std::cout.width(5);
+				std::cout << std::hex;
+				std::cout << (c*16) << ": ";
+
+				for (int d = 0; d < 16; d++)
+				{
+					std::cout.precision(2);
+					std::cout.width(2);
+					std::cout << (uint32_t)(buf.get()[c * 16 + d] & 0xFF) << " ";
+				}
+
+				std::cout << std::dec << std::endl;
+			}
+
+			file.close();
+
+		
+
+			dr::app().shutdown();
 
         return 5678;
     });
 
     std::cout << "vv = " << vv << std::endl;
-    
-    /*
-    
-    auto fn = [=]{
-        for (size_t c = 0; c < 10000000; c++) {
-            dumbo::v1::this_fiber::yield();
-        }
-    };
-    
-    print_fiber_sizes("Before");
-    
-    df::fiber f0(fn);
-    
-    print_fiber_sizes("+1+");
-    
-    df::fiber f1(fn);
-    
-    print_fiber_sizes("+2+");
-    
-    df::fiber f2(fn);
-    
-    print_fiber_sizes("+3+");
-    
-    df::fiber f3(fn);
-    
-    print_fiber_sizes("+4+");
-    
-    df::fiber f4(fn);
-    
-    print_fiber_sizes("+5+");
-    
-    df::fiber f5(fn);
-    
-    print_fiber_sizes("+6+");
-    
-    df::fiber f6(fn);
-    
-    print_fiber_sizes("+7+");
-    
-    df::fiber f7(fn);
-    
-    print_fiber_sizes("+8+");
-    
-    df::fiber f8(fn);
-    
-    print_fiber_sizes("+9+");
-    
-    df::fiber f9(fn);
-    
-    print_fiber_sizes("+10+");
-    
-    f0.join();
-    
-    print_fiber_sizes("+j1+");
-    
-    f1.join();
-    
-    print_fiber_sizes("+j2+");
-    
-    f2.join();
-    f3.join();
-    f4.join();
-    f5.join();
-    f6.join();
-    f7.join();
-    f8.join();
-    f9.join();
-    
-    print_fiber_sizes("+N+");
-    */
     
     return 0;
 }

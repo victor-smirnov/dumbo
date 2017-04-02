@@ -25,7 +25,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <stdint.h>
-
+#include <exception>
 #include <algorithm>
 
 
@@ -75,26 +75,31 @@ void IOPoller::poll()
 		{
 			DWORD num_bytes{};
 			ULONG_PTR completion_key{};
-			OVERLAPPED* overlapped;
+			OVERLAPPED* overlapped {};
 
-			if (GetQueuedCompletionStatus(completion_port_, &num_bytes, &completion_key, &overlapped, 0)) 
-			{ 
+			auto status = GetQueuedCompletionStatus(completion_port_, &num_bytes, &completion_key, &overlapped, 0);
+			
+			auto error_code = GetLastError();
+
+			if ((error_code == WAIT_TIMEOUT || error_code == ERROR_ABANDONED_WAIT_0) && !overlapped) {
+				break; // do not wait for more events in this poll() invocation
+			}
+			else if (overlapped) 
+			{
 				auto ovlMsg = tools::ptr_cast<OVERLAPPEDMsg>(overlapped);
+
+				ovlMsg->size_			= num_bytes;
+				ovlMsg->completion_key_ = completion_key;
+				ovlMsg->status_			= status;
+				ovlMsg->error_code_		= error_code;
+
 				ovlMsg->msg_->process();
-				ovlMsg->msg_->report(num_bytes, completion_key, ovlMsg);
 
 				buffer_.push_front(ovlMsg->msg_);
 			}
 			else {
-				auto error_code = GetLastError();
-
-				if (error_code == WAIT_TIMEOUT) {
-					break;
-				}
-				else {
-					DumpErrorMessage("GetQueuedCompletionStatus failed with error: ", error_code);
-					std::terminate();
-				}
+				DumpErrorMessage("GetQueuedCompletionStatus failed with error: ", error_code);
+				std::terminate();
 			}
 		}
 	}
@@ -126,8 +131,22 @@ void DumpErrorMessage(DWORD error_code) {
 	std::cout << "Error: " << GetErrorMessage(error_code) << std::endl;
 }
 
-void DumpErrorMessage(std::string prefix, DWORD error_code) {
+void DumpErrorMessage(const std::string& prefix, DWORD error_code) {
 	std::cout << prefix << " -- " << GetErrorMessage(error_code) << std::endl;
 }
-    
+
+void DumpErrorAndTerminate(const std::string& prefix, DWORD error_code) {
+	DumpErrorMessage(prefix, error_code);
+	std::terminate();
+}
+
+[[noreturn]] void rise_win_error(tools::SBuf msg, DWORD error_code) 
+{
+	tools::SBuf msg2;
+	msg2 << msg.str();
+
+	msg2 << " -- " << GetErrorMessage(error_code);
+	throw std::runtime_error(msg2);
+}
+
 }}}

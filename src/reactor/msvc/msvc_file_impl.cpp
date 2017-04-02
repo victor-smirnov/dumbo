@@ -33,68 +33,79 @@
 #include <stdint.h>
 #include <exception>
 
+#include <malloc.h>
+
 
 
 namespace dumbo {
 namespace v1 {
 namespace reactor {
-/*    
-class FileSingleIOMessage: public FileIOMessage {
-    
-    //iocb block_;
-    
-    int64_t size_{};
-    uint64_t status_{};
-    
-    FiberContext* fiber_context_;
-    
-public:
-    FileSingleIOMessage(int cpu, int fd, int eventfd, char* buffer, int64_t offset, int64_t size, int command):
-        FileIOMessage(cpu),
-        //block_(tools::make_zeroed<iocb>()),
-        fiber_context_(fibers::context::active())
-    {
-       
-    }
-    
-    virtual ~FileSingleIOMessage() {}
-    
-    virtual void report(void* status) 
-    {
-        
-    }
-    
-    FiberContext* fiber_context() {return fiber_context_;}
-    const FiberContext* fiber_context() const {return fiber_context_;}
-    
-    virtual void process() noexcept {
-        return_ = true;
-    }
-    
-    virtual void finish() 
-    {
-        engine().scheduler()->resume(fiber_context_);
-    }
-    
-    virtual std::string describe() {
-        return "FileSingleIOMessage";
-    }
-   
-    void wait_for() {
-        engine().scheduler()->suspend(fiber_context_);
-    }
-    
-    int64_t size() const {return size_;}
-    uint64_t status() const {return status_;}
-    
-    
-}; 
-    
+
+
+DWORD get_access(FileFlags flags, FileMode mode) {
+
+	DWORD access{};
+
+	if (to_bool(flags & FileFlags::RDONLY)) access |= GENERIC_READ;
+	if (to_bool(flags & FileFlags::WRONLY)) access |= GENERIC_WRITE;
+
+	if (to_bool(flags & FileFlags::RDWR)) access |= (GENERIC_WRITE | GENERIC_READ);
+
+	return access;
+}
+
+DWORD get_disposition(FileFlags flags, FileMode mode) {
+
+	DWORD disposition{};
+
+	if (to_bool(flags & FileFlags::TRUNCATE)) {
+		disposition = TRUNCATE_EXISTING;
+	}
+	else if (to_bool(flags & FileFlags::CREATE)) 
+	{
+		if (to_bool(flags & FileFlags::EXCL)) {
+			disposition = CREATE_NEW;
+		}
+		else {
+			disposition = OPEN_ALWAYS;
+		}
+	}
+	
+	return disposition;
+}
+
+DWORD get_share_mode(FileFlags flags, FileMode mode) {
+	return FILE_SHARE_READ;
+}
+
+DWORD get_flags_and_attributes(FileFlags flags, FileMode mode) 
+{
+	DWORD file_flags { FILE_ATTRIBUTE_NORMAL };
+
+	if (to_bool(flags & FileFlags::CLOEXEC)) file_flags |= FILE_FLAG_DELETE_ON_CLOSE;
+
+	file_flags |= FILE_FLAG_NO_BUFFERING | FILE_FLAG_OVERLAPPED | FILE_FLAG_RANDOM_ACCESS | FILE_FLAG_WRITE_THROUGH;
+
+	return file_flags;
+}
 
 File::File(std::string path, FileFlags flags, FileMode mode): 
     path_(path) 
 {
-    
+	//auto security_attrs = tools::make_zeroed<SECURITY_ATTRIBUTES>();
+	DWORD creation_disposition = get_disposition(flags, mode);
+
+	fd_ = CreateFile(path.c_str(), get_access(flags, mode), get_share_mode(flags, mode), NULL, creation_disposition, get_flags_and_attributes(flags, mode), NULL);
+
+	if (fd_ == INVALID_HANDLE_VALUE) 
+	{
+		DumpErrorMessage(tools::SBuf() << "Can't open/create file " << path, GetLastError());
+		std::terminate();
+	}
+	else {
+		Reactor& r = engine();
+		CreateIoCompletionPort(fd_, r.io_poller().completion_port(), (u_long)0, 0);
+	}
 }
 
 File::~File() noexcept
@@ -104,57 +115,58 @@ File::~File() noexcept
     
 void File::close()
 {
-    if (::close(fd_) < 0) {
-        tools::rise_perror(tools::SBuf() << "Can't close file " << path_);
-    }
+	if (fd_ != INVALID_HANDLE_VALUE && !CloseHandle(fd_)) 
+	{
+		DumpErrorMessage(tools::SBuf() << "Can't close file ", GetLastError());
+		std::terminate();
+	}
 }
 
 int64_t File::seek(int64_t pos, FileSeek whence) 
 {
-    off_t res = ::lseek(fd_, pos, (int)whence);
-    if (res >= 0) 
-    {
-        return res;
-    }
-    else {
-        tools::rise_perror(tools::SBuf() << "Error seeking in file " << path_);
-    }
+	return pos;
 }
 
-
-int64_t File::process_single_io(char* buffer, int64_t offset, int64_t size, int command, const char* opname) 
-{
-    Reactor& r = engine();
-    
-    FileSingleIOMessage message(r.cpu(), fd_, r.io_poller().event_fd(), buffer, offset, size, command);
-    
-    iocb* pblock = message.block();
-    
-    while (true) 
-    {
-        int res = io_submit(r.io_poller().aio_context(), 1, &pblock);
-    
-        if (res > 0) 
-        {
-            message.wait_for();
-            
-            if (message.size() < 0) {
-                tools::rise_perror(-message.size(), tools::SBuf() << "AIO " << opname << " operation failed for file " << path_);
-            }
-            
-            return message.size();
-        } 
-        else if (res < 0)
-        {
-            tools::rise_perror(tools::SBuf() << "Can't submit AIO " << opname << " operation for file " << path_);
-        }
-    }
-}
 
 
 int64_t File::read(char* buffer, int64_t offset, int64_t size) 
 {    
-    return process_single_io(buffer, offset, size, IOCB_CMD_PREAD, "read");
+	Reactor& r = engine();
+
+	AIOMessage message(r.cpu());
+
+	auto overlapped = tools::make_zeroed<OVERLAPPEDMsg>();
+	overlapped.msg_ = &message;
+	overlapped.Offset = (DWORD)offset;
+	overlapped.OffsetHigh = (DWORD)(offset >> 32);
+	
+	while (true) {
+		bool read_result = ::ReadFile(fd_, buffer, (DWORD)size, nullptr, &overlapped);
+
+		DWORD error_code = GetLastError();
+
+		if (read_result || error_code == ERROR_IO_PENDING)
+		{
+			message.wait_for();
+			
+			if (overlapped.status_) {
+				return overlapped.size_;
+			}
+			else {
+				rise_win_error(
+					tools::SBuf() << "Error reading from file " << path_,
+					overlapped.error_code_
+				);
+			}
+		}
+		else if (error_code == ERROR_INVALID_USER_BUFFER || error_code == ERROR_NOT_ENOUGH_MEMORY) {
+			message.wait_for(); // jsut sleep and wait for required resources to appear
+		}
+		else {
+			DumpErrorMessage(tools::SBuf() << "Error starting read from file " << path_, error_code);
+			std::terminate();
+		}
+	}
 }
 
 
@@ -162,109 +174,116 @@ int64_t File::read(char* buffer, int64_t offset, int64_t size)
 
 int64_t File::write(const char* buffer, int64_t offset, int64_t size)
 {    
-    return process_single_io(const_cast<char*>(buffer), offset, size, IOCB_CMD_PWRITE, "write");
+	Reactor& r = engine();
+
+	AIOMessage message(r.cpu());
+
+	auto overlapped = tools::make_zeroed<OVERLAPPEDMsg>();
+	overlapped.msg_ = &message;
+	overlapped.Offset = (DWORD)offset;
+	overlapped.OffsetHigh = (DWORD)(offset >> 32);
+	
+	while (true) 
+	{
+		bool read_result = ::WriteFile(fd_, buffer, (DWORD)size, nullptr, &overlapped);
+
+		DWORD error_code = GetLastError();
+
+		if (read_result || error_code == ERROR_IO_PENDING)
+		{
+			message.wait_for();
+			
+			if (overlapped.status_) {
+				return overlapped.size_;
+			}
+			else {
+				rise_win_error(
+					tools::SBuf() << "Error writing to file " << path_,
+					overlapped.error_code_
+				);
+			}
+		}
+		else if (error_code == ERROR_INVALID_USER_BUFFER || error_code == ERROR_NOT_ENOUGH_MEMORY) {
+			message.wait_for(); // jsut sleep and wait for required resources to appear
+		}
+		else {
+			DumpErrorMessage(tools::SBuf() << "Error starting write to file " << path_, error_code);
+			std::terminate();
+		}
+	}
 }
-
-
-
-
-
-
-
-
-class FileMultiIOMessage: public FileIOMessage {
-    
-    IOBatchBase& batch_;
-    size_t remaining_{};
-    
-    FiberContext* fiber_context_;
-    
-public:
-    FileMultiIOMessage(int cpu, int fd, int event_fd, IOBatchBase& batch):
-        FileIOMessage(cpu),
-        batch_(batch),
-        remaining_(batch.nblocks()),
-        fiber_context_(fibers::context::active())
-    {
-        batch.configure(fd, event_fd, this);
-        return_ = true;
-    }
-    
-    virtual ~FileMultiIOMessage() {}
-    
-    virtual void report(io_event* status) 
-    {
-        ExtendedIOCB* eiocb = tools::ptr_cast<ExtendedIOCB>((char*)status->obj);
-        eiocb->processed    = status->res;
-        eiocb->status       = status->res2;
-    }
-    
-    FiberContext* fiber_context() {return fiber_context_;}
-    const FiberContext* fiber_context() const {return fiber_context_;}
-    
-    virtual void process() noexcept {}
-    
-    virtual void finish() 
-    {
-        if (--remaining_ == 0) 
-        {
-            engine().scheduler()->resume(fiber_context_);
-        }
-    }
-    
-    virtual std::string describe() {
-        return "FileMultiIOMessage";
-    }
-   
-    void wait_for() {
-        engine().scheduler()->suspend(fiber_context_);
-    }
-    
-    void add_submited(size_t num) 
-    {
-        remaining_ = num;
-        batch_.set_submited(batch_.submited() + num);
-    }
-}; 
-
-
-
-
 
 
 size_t File::process_batch(IOBatchBase& batch, bool rise_ex_on_error) 
 {
-    Reactor& r = engine();
-    
-    FileMultiIOMessage message(r.cpu(), fd_, r.io_poller().event_fd(), batch);
-    
-    size_t total = batch.nblocks();
-    size_t done = 0;
-    
-    while (done < total)
-    {
-        iocb** pblock = batch.blocks(done);
-        int to_submit = total - done;
-        int res = io_submit(r.io_poller().aio_context(), to_submit, pblock);
-    
-        if (res > 0)
-        {
-            message.add_submited(res);
-            
-            message.wait_for();
-            
-            done += res;
-        } 
-        else if (res < 0)
-        {
-            tools::rise_perror(tools::SBuf() << "Can't submit AIO batch operations for file " << path_);
-        }
-        else {
-            return 0;
-        }
-    }
-    
-    return done;
+	Reactor& r = engine();
+
+	AIOMessage message(r.cpu());
+
+	batch.configure(&message);
+
+	while (true)
+	{
+		size_t wait_num = 0;
+
+		for (size_t c = 0; c < batch.nblocks(); c++, wait_num++) 
+		{
+			auto* ovl = batch.block(c);
+
+			bool op_result;
+
+			while (true)
+			{
+				if (ovl->operation_ == OVERLAPPEDMsg::WRITE)
+				{
+					op_result = ::WriteFile(fd_, ovl->data_, (DWORD)ovl->requested_size_, nullptr, ovl);
+				}
+				else {
+					op_result = ::ReadFile(fd_, ovl->data_, (DWORD)ovl->requested_size_, nullptr, ovl);
+				}
+
+				DWORD error_code = GetLastError();
+
+				if (op_result || error_code == ERROR_IO_PENDING) {
+					// just continue batch submition
+					break;
+				}
+				else if (error_code == ERROR_INVALID_USER_BUFFER || error_code == ERROR_NOT_ENOUGH_MEMORY) {
+					message.wait_for(); // jsut sleep and wait for required resources to appear
+				}
+				else 
+				{
+					// Wait for submited events to complete
+					if (wait_num > 0) {
+						message.set_count(wait_num);
+						message.wait_for();
+					}
+					
+					batch.set_submited(wait_num);
+
+					if (rise_ex_on_error) 
+					{
+						rise_win_error(
+							tools::SBuf() << "Error submiting AIO " << (ovl->operation_ == OVERLAPPEDMsg::WRITE ? "write" : "read")
+							<< " operation number " << wait_num
+							<< " to " << path_,
+							error_code
+						);
+					}
+					else {						
+						return wait_num;
+					}
+				}
+			}
+		}
+		
+		message.set_count(wait_num);
+		message.wait_for();
+
+		batch.set_submited(wait_num);
+
+		return wait_num;
+	}
 }
 
 
@@ -284,6 +303,25 @@ void File::fdsync()
     // NOOP at the moment
 }
 
-*/
+
+DMABuffer allocate_dma_buffer(size_t size) 
+{
+	if (size != 0) 
+	{
+		void* ptr = _aligned_malloc(size, 512);
+
+		if (ptr) {
+			DMABuffer buf(tools::ptr_cast<char>(ptr));
+			return buf;
+		}
+		else {
+			tools::rise_perror(tools::SBuf() << "Cant allocate dma buffer of " << size << " bytes");
+		}
+	}
+	else {
+		tools::rise_error(tools::SBuf() << "Cant allocate dma buffer of 0 bytes");
+	}
+}
+
     
 }}}

@@ -56,6 +56,8 @@ public:
     void wait_for();
     
     size_t count() const {return count_;}
+
+	void set_count(size_t count) { count_ = count; }
 };
 
 

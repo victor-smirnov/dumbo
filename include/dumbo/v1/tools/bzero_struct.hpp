@@ -26,7 +26,7 @@ namespace tools {
 template <typename StructT>
 StructT make_zeroed()
 {
-    static_assert(std::is_trivial<StructT>::value, "");
+    static_assert(std::is_trivial<StructT>::value, "Requested zeroed type is not trivial");
     
     StructT result;
     

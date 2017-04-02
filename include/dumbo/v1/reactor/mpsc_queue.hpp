@@ -26,6 +26,7 @@
 #include <vector>
 #include <memory>
 #include <iostream>
+#include <algorithm>
 
 namespace dumbo {
 namespace v1 {

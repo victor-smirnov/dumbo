@@ -19,6 +19,8 @@
 #include "../message/fiber_io_message.hpp"
 #include "../ring_buffer.hpp"
 
+#include "../../tools/string_buffer.hpp"
+
 #include <memory>
 #include <thread>
 #include <string>
@@ -39,7 +41,10 @@ namespace reactor {
 
 std::string GetErrorMessage(DWORD error_code);
 void DumpErrorMessage(DWORD error_code);
-void DumpErrorMessage(std::string prefix, DWORD error_code);
+void DumpErrorMessage(const std::string& prefix, DWORD error_code);
+void DumpErrorAndTerminate(const std::string& prefix, DWORD error_code);
+[[noreturn]] void rise_win_error(tools::SBuf msg, DWORD error_code);
+
 
 using IOBuffer = RingBuffer<Message*>;
 
@@ -49,31 +54,47 @@ class AIOMessage;
 
 
 class AIOMessage: public FiberIOMessage {
-	
-	DWORD size_{};
-	ULONG_PTR completion_key_{};
-	OVERLAPPEDMsg* overlapped_{};
 
 public:
 	AIOMessage(int cpu, FiberContext* fiber_context = fibers::context::active()): 
 		FiberIOMessage(cpu, 1, fiber_context) 
 	{}
 
-	virtual void report(DWORD size, ULONG_PTR completion_key, OVERLAPPEDMsg* overlapped) {
-		size_ = size; completion_key_ = completion_key; overlapped_ = overlapped;
-	}
-
-	DWORD size() const { return size_; };
-	ULONG_PTR completion_key() const { return completion_key_; }
-	OVERLAPPEDMsg* overlapped() const { return overlapped_; }
-
 	virtual std::string describe() { return "AIOMessage"; }
 };
 
 
 
+
 struct OVERLAPPEDMsg : OVERLAPPED {
+
+	enum {READ, WRITE};
+
 	AIOMessage* msg_;
+
+	DWORD size_;
+	ULONG_PTR completion_key_;
+	DWORD error_code_;
+	bool status_;
+	int operation_;
+
+	void* data_;
+	int64_t requested_size_;
+
+	void configure(int operation, void* data, int64_t offset, int64_t size) 
+	{
+		operation_ = operation;
+
+		data_ = data;
+		requested_size_ = size;
+
+		this->Offset = (DWORD)offset;
+		this->OffsetHigh = (DWORD)(offset >> 32);
+	}
+
+	void configure(int operation){
+		operation_ = operation;
+	}
 };
 
 
@@ -96,5 +117,7 @@ public:
     
 	HANDLE completion_port() { return completion_port_; }
 };
-    
+
+
+
 }}}

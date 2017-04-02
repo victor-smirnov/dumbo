@@ -21,6 +21,8 @@
 #include "../../tools/bzero_struct.hpp"
 #include "../../tools/perror.hpp"
 
+#include "msvc_io_poller.hpp"
+
 #include <stdint.h>
 #include <string>
 #include <sys/types.h>
@@ -38,40 +40,19 @@ namespace dumbo {
 namespace v1 {
 namespace reactor {
 
-	/*
-struct ExtendedIOCB: iocb {
-    int64_t processed;
-    uint64_t status;
-    
-    void dump(int cnt) const {
-        std::cout << cnt << ": " << aio_data << "," << aio_resfd << ", " << aio_offset << " " << std::endl;
-    }
-    
-    void configure(iocb& block, void* data, int64_t offset, int64_t size, int command)
-    {
-        block.aio_lio_opcode = command;
-        block.aio_reqprio = 0;
-        
-        block.aio_buf = (__u64) data;
-        block.aio_nbytes = size;
-        block.aio_offset = offset;
-        block.aio_flags = IOCB_FLAG_RESFD;
-    }
-};
-
+	
+	
 class IOBatchBase {
 public:
     virtual ~IOBatchBase() {}
     
-    virtual iocb** blocks(size_t from = 0) = 0;
+    virtual OVERLAPPEDMsg* block(size_t idx) = 0;
     virtual size_t nblocks() const = 0;
-    
-    virtual void configure(int fd, int event_fd, Message* message) = 0;
-    
+
     virtual void set_submited(size_t num) = 0;
     virtual size_t submited() const = 0;
-    
-    virtual void dump() const = 0;
+   
+	virtual void configure(AIOMessage* msg) = 0;
 };
 
 
@@ -79,84 +60,38 @@ public:
 
 
 class FileIOBatch: public IOBatchBase {
-    std::vector<ExtendedIOCB> blocks_;
-    std::vector<iocb*> pblocks_;
-    
-    
+    std::vector<OVERLAPPEDMsg> blocks_;
+
     size_t submited_{};
     
 public:
     
     void add_read(void* data, int64_t offset, int64_t size) 
     {
-        ExtendedIOCB iocb = tools::make_zeroed<ExtendedIOCB>();
+		auto iocb = tools::make_zeroed<OVERLAPPEDMsg>();
+		
+        iocb.configure(OVERLAPPEDMsg::READ, data, offset, size);
         
-        iocb.configure(iocb, data, offset, size, IOCB_CMD_PREAD);
-        
-        blocks_.push_back(iocb);
-        pblocks_.push_back(nullptr);
+		blocks_.push_back(iocb);
     }
     
     void add_write(const void* data, int64_t offset, int64_t size)
     {
-        ExtendedIOCB iocb = tools::make_zeroed<ExtendedIOCB>();
-        
-        iocb.configure(iocb, const_cast<void*>(data), offset, size, IOCB_CMD_PWRITE);
-        
-        blocks_.push_back(iocb);
-        pblocks_.push_back(nullptr);
+		auto iocb = tools::make_zeroed<OVERLAPPEDMsg>();
+
+		iocb.configure(OVERLAPPEDMsg::WRITE, const_cast<void*>(data), offset, size);
+
+		blocks_.push_back(iocb);
     }
     
     
-    
-    ExtendedIOCB& block(size_t idx) {return blocks_[idx];}
-    const ExtendedIOCB& block(size_t idx) const {return blocks_[idx];}
-    
-    int64_t processed(size_t idx) const {
-        return blocks_[idx].processed;
-    }
-    
-    
-    uint64_t status(size_t idx) const {
-        return blocks_[idx].status;
-    }
-    
-    void check_status(int idx) const 
+    virtual OVERLAPPEDMsg* block(size_t idx)
     {
-        auto& block = blocks_[idx];
-        
-        if (block.processed < 0) 
-        {
-            tools::rise_perror(
-                -block.processed, 
-                tools::SBuf() 
-                    << "AIO " 
-                    <<  (block.aio_lio_opcode == IOCB_CMD_PREAD ? "read" : "write")
-                    << " operation failed"
-            );
-        }
-    }
-    
-    void check_status() const 
-    {
-        for (size_t c = 0; c < blocks_.size(); c++){
-            check_status(c);
-        }
-    }
-    
-    
-    
-    virtual iocb** blocks(size_t from = 0) 
-    {
-        for (size_t c = 0; c < blocks_.size(); c++){
-            pblocks_[c] = &blocks_[c];
-        }
-        
-        return &pblocks_[from];
+        return &blocks_[idx];
     }
     
     virtual size_t nblocks() const {
-        return pblocks_.size();
+        return blocks_.size();
     }
     
     virtual void set_submited(size_t num) {
@@ -164,28 +99,12 @@ public:
     }
     
     virtual size_t submited() const {return submited_;}
-    
-    virtual void configure(int fd, int event_fd, Message* message)
-    {
-        for (auto& block: blocks_)
-        {
-            block.aio_data = (__u64) message;
-            block.aio_fildes = fd;
-            block.aio_resfd = event_fd;
-        }
-    }
-    
-    virtual void dump() const 
-    {
-        int cnt = 0;
-        for (auto& block: blocks_)
-        {
-            block.dump(cnt);
-            cnt++;
-        }
-    }
+
+	virtual void configure(AIOMessage* msg) {
+		for (auto& ovl : blocks_) ovl.msg_ = msg;
+	}
 };
 
-*/
+
     
 }}}
